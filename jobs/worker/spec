@@ -178,3 +178,8 @@ properties:
     description: |
       Environment name you wish to group errors under in yeller.
     default: ""
+
+  ephemeral:
+    description: |
+      If set, the worker will immediately disappear upon stalling.
+    default: false

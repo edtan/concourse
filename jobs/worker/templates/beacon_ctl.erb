@@ -105,6 +105,9 @@ case $1 in
        <% p("tags").each do |tag| %> \
          --tag=<%= tag %> \
        <% end %> \
+       <% if p("ephemeral") %> \
+         --ephemeral \
+       <% end %> \
        --garden-addr=<%= garden_addr %> \
        --baggageclaim-url=<%= baggageclaim_url %> \
        $resource_metadata \
