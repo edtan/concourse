@@ -73,6 +73,8 @@ type Worker interface {
 
 	FindContainer(owner ContainerOwner) (CreatingContainer, CreatedContainer, error)
 	CreateContainer(owner ContainerOwner, meta ContainerMetadata) (CreatingContainer, error)
+
+	SetSession(s string)
 }
 
 type worker struct {
@@ -120,6 +122,9 @@ func (worker *worker) TeamName() string                        { return worker.t
 func (worker *worker) Ephemeral() bool                         { return worker.ephemeral }
 
 func (worker *worker) StartTime() time.Time { return worker.startTime }
+
+func (worker *worker) SetSession(s string) { worker.conn.SetSession(s) }
+
 func (worker *worker) ExpiresAt() time.Time { return worker.expiresAt }
 
 func (worker *worker) Reload() (bool, error) {
