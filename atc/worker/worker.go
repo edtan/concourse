@@ -308,7 +308,7 @@ func (worker *gardenWorker) FindOrCreateContainer(
 	}
 
 	logger.Debug("created-container-in-db")
-	worker.dbWorker.SetSession(fmt.Sprintf("%s.created-container-in-garden", logger.SessionName()))
+	worker.dbWorker.SetSession(fmt.Sprintf("%s.created-container-in-db", logger.SessionName()))
 
 	return worker.helper.constructGardenWorkerContainer(
 		logger,
