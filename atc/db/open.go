@@ -39,7 +39,6 @@ type Conn interface {
 
 	Close() error
 	Name() string
-	Logger() lager.Logger
 
 	SetSession(s string)
 }
@@ -350,10 +349,6 @@ type db struct {
 
 func (db *db) SetSession(s string) {
 	// stub
-}
-
-func (db *db) Logger() lager.Logger {
-	return db.logger
 }
 
 func (db *db) Name() string {
