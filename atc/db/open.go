@@ -390,7 +390,7 @@ func (db *db) Begin() (Tx, error) {
 		return nil, err
 	}
 
-	return &dbTx{tx, GlobalConnectionTracker.Track()}, nil
+	return &dbTx{tx, db.logger, GlobalConnectionTracker.Track()}, nil
 }
 
 func (db *db) Exec(query string, args ...interface{}) (sql.Result, error) {
@@ -417,11 +417,20 @@ func (db *db) QueryRow(query string, args ...interface{}) squirrel.RowScanner {
 type dbTx struct {
 	*sql.Tx
 
+	logger  lager.Logger
 	session *ConnectionSession
+}
+
+func (tx *dbTx) elapsed(action, query string) func() {
+	start := time.Now()
+	return func() {
+		tx.logger.Debug(fmt.Sprintf("%s.%s", tx.logger.SessionName(), action), lager.Data{"duration": fmt.Sprintf("%v", time.Since(start)), "query": query})
+	}
 }
 
 // to conform to squirrel.Runner interface
 func (tx *dbTx) QueryRow(query string, args ...interface{}) squirrel.RowScanner {
+	defer tx.elapsed("query-row", tx.strip(query))()
 	return tx.Tx.QueryRow(query, args...)
 }
 
@@ -433,6 +442,22 @@ func (tx *dbTx) Commit() error {
 func (tx *dbTx) Rollback() error {
 	defer tx.session.Release()
 	return tx.Tx.Rollback()
+}
+
+// for logging
+func (tx *dbTx) Exec(query string, args ...interface{}) (sql.Result, error) {
+	defer tx.elapsed("exec", tx.strip(query))()
+	return tx.Tx.Exec(query, args...)
+
+}
+
+func (tx *dbTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	defer tx.elapsed("query", tx.strip(query))()
+	return tx.Tx.Query(query, args...)
+}
+
+func (tx *dbTx) strip(query string) string {
+	return strings.Join(strings.Fields(query), " ")
 }
 
 // Rollback ignores errors, and should be used with defer.
