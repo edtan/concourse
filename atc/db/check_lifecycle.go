@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -24,7 +25,7 @@ func NewCheckLifecycle(conn Conn) *checkLifecycle {
 }
 
 func (lifecycle *checkLifecycle) RemoveExpiredChecks(recyclePeriod time.Duration) error {
-	lifecycle.conn.SetSession("checkLifecycle-RemoveExpiredChecks")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "checkLifecycle-RemoveExpiredChecks")
 
 	_, err := psql.Delete("checks").
 		Where(
@@ -36,7 +37,7 @@ func (lifecycle *checkLifecycle) RemoveExpiredChecks(recyclePeriod time.Duration
 			},
 		).
 		RunWith(lifecycle.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }

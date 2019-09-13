@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -197,8 +198,8 @@ func (t *resourceType) Version() atc.Version              { return t.version }
 func (t *resourceType) CurrentPinnedVersion() atc.Version { return nil }
 
 func (t *resourceType) Reload() (bool, error) {
-	t.conn.SetSession("resourceType-Reload")
-	row := resourceTypesQuery.Where(sq.Eq{"r.id": t.id}).RunWith(t.conn).QueryRow()
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceType-Reload")
+	row := resourceTypesQuery.Where(sq.Eq{"r.id": t.id}).RunWith(t.conn).QueryRowContext(ctx)
 
 	err := scanResourceType(t, row)
 	if err != nil {
@@ -223,20 +224,20 @@ func (t *resourceType) SetResourceConfig(source atc.Source, resourceTypes atc.Ve
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("resourceType-SetResourceConfig")
 
 	resourceConfig, err := resourceConfigDescriptor.findOrCreate(tx, t.lockFactory, t.conn)
 	if err != nil {
 		return nil, err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceType-SetResourceConfig")
 	_, err = psql.Update("resource_types").
 		Set("resource_config_id", resourceConfig.ID()).
 		Where(sq.Eq{
 			"id": t.id,
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +257,7 @@ func (t *resourceType) SetResourceConfig(source atc.Source, resourceTypes atc.Ve
 }
 
 func (t *resourceType) SetCheckSetupError(cause error) error {
-	t.conn.SetSession("resourceType-SetCheckSetupError")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceType-SetCheckSetupError")
 	var err error
 
 	if cause == nil {
@@ -264,13 +265,13 @@ func (t *resourceType) SetCheckSetupError(cause error) error {
 			Set("check_error", nil).
 			Where(sq.Eq{"id": t.id}).
 			RunWith(t.conn).
-			Exec()
+			ExecContext(ctx)
 	} else {
 		_, err = psql.Update("resource_types").
 			Set("check_error", cause.Error()).
 			Where(sq.Eq{"id": t.id}).
 			RunWith(t.conn).
-			Exec()
+			ExecContext(ctx)
 	}
 
 	return err

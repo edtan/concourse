@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"time"
@@ -53,7 +54,7 @@ func (a *artifact) Volume(teamID int) (CreatedVolume, bool, error) {
 }
 
 func saveWorkerArtifact(tx Tx, conn Conn, atcArtifact atc.WorkerArtifact) (WorkerArtifact, error) {
-	tx.SetSession("saveWorkerArtifact")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerArtifact-saveWorkerArtifact")
 
 	var artifactID int
 
@@ -69,7 +70,7 @@ func saveWorkerArtifact(tx Tx, conn Conn, atcArtifact atc.WorkerArtifact) (Worke
 		SetMap(values).
 		Suffix("RETURNING id").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&artifactID)
 
 	if err != nil {
@@ -90,7 +91,7 @@ func saveWorkerArtifact(tx Tx, conn Conn, atcArtifact atc.WorkerArtifact) (Worke
 }
 
 func getWorkerArtifact(tx Tx, conn Conn, id int) (WorkerArtifact, bool, error) {
-	tx.SetSession("getWorkerArtifact")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerArtifact-getWorkerArtifact")
 	var (
 		createdAtTime pq.NullTime
 		buildID       sql.NullInt64
@@ -104,7 +105,7 @@ func getWorkerArtifact(tx Tx, conn Conn, id int) (WorkerArtifact, bool, error) {
 			"id": id,
 		}).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&artifact.id, &createdAtTime, &artifact.name, &buildID)
 	if err != nil {
 		if err == sql.ErrNoRows {

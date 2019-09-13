@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
@@ -33,14 +34,16 @@ type Conn interface {
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	QueryRow(query string, args ...interface{}) squirrel.RowScanner
 
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) squirrel.RowScanner
+
 	SetMaxIdleConns(n int)
 	SetMaxOpenConns(n int)
 	Stats() sql.DBStats
 
 	Close() error
 	Name() string
-
-	SetSession(s string)
 }
 
 //go:generate counterfeiter . Tx
@@ -53,7 +56,10 @@ type Tx interface {
 	QueryRow(query string, args ...interface{}) squirrel.RowScanner
 	Rollback() error
 	Stmt(stmt *sql.Stmt) *sql.Stmt
-	SetSession(s string)
+
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) squirrel.RowScanner
 }
 
 func Open(logger lager.Logger, sqlDriver string, sqlDataSource string, newKey *encryption.Key, oldKey *encryption.Key, connectionName string, lockFactory lock.LockFactory) (Conn, error) {
@@ -348,10 +354,6 @@ type db struct {
 	name       string
 }
 
-func (db *db) SetSession(s string) {
-	// stub
-}
-
 func (db *db) Name() string {
 	return db.name
 }
@@ -415,6 +417,19 @@ func (db *db) QueryRow(query string, args ...interface{}) squirrel.RowScanner {
 	return db.DB.QueryRow(query, args...)
 }
 
+// for logging
+func (db *db) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return db.DB.QueryContext(ctx, query, args...)
+}
+
+func (db *db) QueryRowContext(ctx context.Context, query string, args ...interface{}) squirrel.RowScanner {
+	return db.DB.QueryRowContext(ctx, query, args...)
+}
+
+func (db *db) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return db.DB.ExecContext(ctx, query, args...)
+}
+
 type dbTx struct {
 	*sql.Tx
 
@@ -458,8 +473,19 @@ func (tx *dbTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return tx.Tx.Query(query, args...)
 }
 
-func (tx *dbTx) SetSession(s string) {
-	tx.loggerSession = s
+func (tx *dbTx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	defer tx.elapsed(ctx.Value(ctxQueryNameKey).(string), tx.strip(query))()
+	return tx.Tx.QueryContext(ctx, query, args...)
+}
+
+func (tx *dbTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) squirrel.RowScanner {
+	defer tx.elapsed(ctx.Value(ctxQueryNameKey).(string), tx.strip(query))()
+	return tx.Tx.QueryRowContext(ctx, query, args...)
+}
+
+func (tx *dbTx) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	defer tx.elapsed(ctx.Value(ctxQueryNameKey).(string), tx.strip(query))()
+	return tx.Tx.ExecContext(ctx, query, args...)
 }
 
 func (tx *dbTx) strip(query string) string {

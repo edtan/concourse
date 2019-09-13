@@ -1,6 +1,8 @@
 package db
 
 import (
+	"context"
+
 	sq "github.com/Masterminds/squirrel"
 )
 
@@ -46,22 +48,22 @@ func (lifecycle resourceConfigCheckSessionLifecycle) CleanInactiveResourceConfig
 		return err
 	}
 
-	lifecycle.conn.SetSession("resourceConfigCheckSessionLifecycle-CleanInactiveResourceConfigCheckSessions")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigCheckSessionLifecycle-CleanInactiveResourceConfigCheckSessions")
 	_, err = sq.Delete("resource_config_check_sessions").
 		Where("id NOT IN (" + usedByActiveUnpausedResources + " UNION " + usedByActiveUnpausedResourceTypes + ")").
 		PlaceholderFormat(sq.Dollar).
 		RunWith(lifecycle.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
 
 func (lifecycle resourceConfigCheckSessionLifecycle) CleanExpiredResourceConfigCheckSessions() error {
-	lifecycle.conn.SetSession("resourceConfigCheckSessionLifecycle-CleanExpiredResourceConfigCheckSessions")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigCheckSessionLifecycle-CleanExpiredResourceConfigCheckSessions")
 	_, err := psql.Delete("resource_config_check_sessions").
 		Where(sq.Expr("expires_at < NOW()")).
 		RunWith(lifecycle.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }

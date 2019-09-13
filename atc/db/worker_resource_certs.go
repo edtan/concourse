@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	sq "github.com/Masterminds/squirrel"
@@ -16,10 +17,12 @@ type UsedWorkerResourceCerts struct {
 }
 
 func (workerResourceCerts WorkerResourceCerts) Find(runner sq.BaseRunner) (*UsedWorkerResourceCerts, bool, error) {
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerResourceCerts-Find")
+
 	var id int
 	err := workerResourceCerts.findQuery().
 		RunWith(runner).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 
 	if err != nil {
@@ -34,7 +37,6 @@ func (workerResourceCerts WorkerResourceCerts) Find(runner sq.BaseRunner) (*Used
 }
 
 func (workerResourceCerts WorkerResourceCerts) FindOrCreate(tx Tx) (*UsedWorkerResourceCerts, error) {
-	tx.SetSession("workerResourceCerts-FindOrCreate")
 	uwrc, found, err := workerResourceCerts.Find(tx)
 	if err != nil {
 		return nil, err
@@ -57,7 +59,7 @@ func (workerResourceCerts WorkerResourceCerts) findQuery() sq.SelectBuilder {
 }
 
 func (workerResourceCerts WorkerResourceCerts) create(tx Tx) (*UsedWorkerResourceCerts, error) {
-	tx.SetSession("workerResourceCerts-create")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerResourceCerts-create")
 	var id int
 	err := psql.Insert("worker_resource_certs").
 		Columns(
@@ -70,7 +72,7 @@ func (workerResourceCerts WorkerResourceCerts) create(tx Tx) (*UsedWorkerResourc
 		).
 		Suffix("RETURNING id").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 	if err != nil {
 		return nil, err

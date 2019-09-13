@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	sq "github.com/Masterminds/squirrel"
@@ -33,11 +34,11 @@ func (r *resourceFactory) Resource(resourceID int) (Resource, bool, error) {
 		lockFactory: r.lockFactory,
 	}
 
-	r.conn.SetSession("resourceFactory-Resource")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceFactory-Resource")
 	row := resourcesQuery.
 		Where(sq.Eq{"r.id": resourceID}).
 		RunWith(r.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanResource(resource, row)
 	if err != nil {
@@ -51,7 +52,7 @@ func (r *resourceFactory) Resource(resourceID int) (Resource, bool, error) {
 }
 
 func (r *resourceFactory) VisibleResources(teamNames []string) ([]Resource, error) {
-	r.conn.SetSession("resourceFactory-VisibleResources")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceFactory-VisibleResources")
 	rows, err := resourcesQuery.
 		Where(sq.Or{
 			sq.Eq{"t.name": teamNames},
@@ -62,7 +63,7 @@ func (r *resourceFactory) VisibleResources(teamNames []string) ([]Resource, erro
 		}).
 		OrderBy("r.id ASC").
 		RunWith(r.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -71,11 +72,11 @@ func (r *resourceFactory) VisibleResources(teamNames []string) ([]Resource, erro
 }
 
 func (r *resourceFactory) AllResources() ([]Resource, error) {
-	r.conn.SetSession("resourceFactory-AllResources")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceFactory-AllResources")
 	rows, err := resourcesQuery.
 		OrderBy("r.id ASC").
 		RunWith(r.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}

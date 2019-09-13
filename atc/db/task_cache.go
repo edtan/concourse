@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	sq "github.com/Masterminds/squirrel"
@@ -27,7 +28,6 @@ func (tc *usedTaskCache) StepName() string { return tc.stepName }
 func (tc *usedTaskCache) Path() string     { return tc.path }
 
 func (f usedTaskCache) findOrCreate(tx Tx) (UsedTaskCache, error) {
-	tx.SetSession("usedTaskCache-findOrCreate")
 	utc, found, err := f.find(tx)
 	if err != nil {
 		return nil, err
@@ -35,6 +35,8 @@ func (f usedTaskCache) findOrCreate(tx Tx) (UsedTaskCache, error) {
 
 	if !found {
 		var id int
+
+		ctx := context.WithValue(context.Background(), ctxQueryNameKey, "usedTaskCache-findOrCreate")
 		err = psql.Insert("task_caches").
 			Columns(
 				"job_id",
@@ -52,7 +54,7 @@ func (f usedTaskCache) findOrCreate(tx Tx) (UsedTaskCache, error) {
 					RETURNING id
 				`, f.jobID).
 			RunWith(tx).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&id)
 		if err != nil {
 			return nil, err
@@ -70,6 +72,7 @@ func (f usedTaskCache) findOrCreate(tx Tx) (UsedTaskCache, error) {
 }
 
 func (f usedTaskCache) find(runner sq.Runner) (UsedTaskCache, bool, error) {
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "usedTaskCache-find")
 	var id int
 	err := psql.Select("id").
 		From("task_caches").
@@ -79,7 +82,7 @@ func (f usedTaskCache) find(runner sq.Runner) (UsedTaskCache, bool, error) {
 			"path":      f.path,
 		}).
 		RunWith(runner).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -92,8 +93,8 @@ func (repository *containerRepository) UpdateContainersMissingSince(workerName s
 		return err
 	}
 
-	repository.conn.SetSession("containerRepository-UpdateContainersMissingSince")
-	rows, err := repository.conn.Query(query, args...)
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "containerRepository-UpdateContainersMissingSince")
+	rows, err := repository.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -120,7 +121,7 @@ func (repository *containerRepository) UpdateContainersMissingSince(workerName s
 		return err
 	}
 
-	rows, err = repository.conn.Query(query, args...)
+	rows, err = repository.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -141,7 +142,7 @@ func (repository *containerRepository) FindDestroyingContainers(workerName strin
 }
 
 func (repository *containerRepository) RemoveMissingContainers(gracePeriod time.Duration) (int, error) {
-	repository.conn.SetSession("containerRepository-RemoveMissingContainers")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "containerRepository-RemoveMissingContainers")
 	result, err := psql.Delete("containers").
 		Where(
 			sq.And{
@@ -153,7 +154,7 @@ func (repository *containerRepository) RemoveMissingContainers(gracePeriod time.
 				},
 			},
 		).RunWith(repository.conn).
-		Exec()
+		ExecContext(ctx)
 
 	if err != nil {
 		return 0, err
@@ -168,7 +169,7 @@ func (repository *containerRepository) RemoveMissingContainers(gracePeriod time.
 }
 
 func (repository *containerRepository) RemoveDestroyingContainers(workerName string, handlesToIgnore []string) (int, error) {
-	repository.conn.SetSession("containerRepository-RemoveDestroyingContainers")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "containerRepository-RemoveDestroyingContainers")
 	rows, err := psql.Delete("containers").
 		Where(
 			sq.And{
@@ -183,7 +184,7 @@ func (repository *containerRepository) RemoveDestroyingContainers(workerName str
 				},
 			},
 		).RunWith(repository.conn).
-		Exec()
+		ExecContext(ctx)
 
 	if err != nil {
 		return 0, err
@@ -227,8 +228,8 @@ func (repository *containerRepository) FindOrphanedContainers() ([]CreatingConta
 		return nil, nil, nil, err
 	}
 
-	repository.conn.SetSession("containerRepository-FindOrphanedContainers")
-	rows, err := repository.conn.Query(query, args...)
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "containerRepository-FindOrphanedContainers")
+	rows, err := repository.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -350,12 +351,12 @@ func scanContainer(row sq.RowScanner, conn Conn) (CreatingContainer, CreatedCont
 }
 
 func (repository *containerRepository) DestroyFailedContainers() (int, error) {
-	repository.conn.SetSession("containerRepository-DestroyFailedContainers")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "containerRepository-DestroyFailedContainers")
 	result, err := sq.Delete("containers").
 		Where(sq.Eq{"containers.state": atc.ContainerStateFailed}).
 		PlaceholderFormat(sq.Dollar).
 		RunWith(repository.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return 0, err
 	}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 
@@ -86,10 +87,10 @@ func (r *resourceConfigVersion) ResourceConfigScope() ResourceConfigScope {
 }
 
 func (r *resourceConfigVersion) Reload() (bool, error) {
-	r.conn.SetSession("resourceConfigVersion-Reload")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigVersion-Reload")
 	row := resourceConfigVersionQuery.Where(sq.Eq{"v.id": r.id}).
 		RunWith(r.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanResourceConfigVersion(r, row)
 	if err != nil {

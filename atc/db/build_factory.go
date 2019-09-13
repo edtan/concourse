@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strconv"
@@ -38,16 +39,16 @@ func NewBuildFactory(conn Conn, lockFactory lock.LockFactory, oneOffGracePeriod 
 }
 
 func (f *buildFactory) Build(buildID int) (Build, bool, error) {
-	f.conn.SetSession("buildFactory-collectEvents")
 	build := &build{
 		conn:        f.conn,
 		lockFactory: f.lockFactory,
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "buildFactory-collectEvents")
 	row := buildsQuery.
 		Where(sq.Eq{"b.id": buildID}).
 		RunWith(f.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanBuild(build, row, f.conn.EncryptionStrategy())
 	if err != nil {
@@ -91,7 +92,7 @@ func (f *buildFactory) PublicBuilds(page Page) ([]Build, Pagination, error) {
 }
 
 func (f *buildFactory) MarkNonInterceptibleBuilds() error {
-	f.conn.SetSession("buildFactory-MarkNonInterceptibleBuilds")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "buildFactory-MarkNonInterceptibleBuilds")
 	_, err := psql.Update("builds b").
 		Set("interceptible", false).
 		Where(sq.Eq{
@@ -107,7 +108,7 @@ func (f *buildFactory) MarkNonInterceptibleBuilds() error {
 			sq.Eq{"status": string(BuildStatusSucceeded)},
 		}).
 		RunWith(f.conn).
-		Exec()
+		ExecContext(ctx)
 	return err
 }
 
@@ -129,8 +130,8 @@ func (f *buildFactory) GetAllStartedBuilds() ([]Build, error) {
 }
 
 func getBuilds(buildsQuery sq.SelectBuilder, conn Conn, lockFactory lock.LockFactory) ([]Build, error) {
-	conn.SetSession("buildFactory-getBuilds")
-	rows, err := buildsQuery.RunWith(conn).Query()
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "buildFactory-getBuilds")
+	rows, err := buildsQuery.RunWith(conn).QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,7 @@ func getBuilds(buildsQuery sq.SelectBuilder, conn Conn, lockFactory lock.LockFac
 }
 
 func getBuildsWithDates(buildsQuery, minMaxIdQuery sq.SelectBuilder, page Page, conn Conn, lockFactory lock.LockFactory) ([]Build, Pagination, error) {
-	conn.SetSession("buildFactory-getBuildsWithDates")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "buildFactory-getBuildsWithDates")
 	var newPage = Page{Limit: page.Limit}
 
 	if page.Since != 0 {
@@ -162,7 +163,7 @@ func getBuildsWithDates(buildsQuery, minMaxIdQuery sq.SelectBuilder, page Page, 
 			OrderBy("b.id ASC").
 			Limit(1).
 			RunWith(conn).
-			Query()
+			QueryContext(ctx)
 
 		if err != nil {
 			// The user has no builds since that given time
@@ -198,7 +199,7 @@ func getBuildsWithDates(buildsQuery, minMaxIdQuery sq.SelectBuilder, page Page, 
 			OrderBy("b.id DESC").
 			Limit(1).
 			RunWith(conn).
-			Query()
+			QueryContext(ctx)
 		if err != nil {
 			// The user has no builds since that given time
 			if err == sql.ErrNoRows {
@@ -228,7 +229,6 @@ func getBuildsWithDates(buildsQuery, minMaxIdQuery sq.SelectBuilder, page Page, 
 }
 
 func getBuildsWithPagination(buildsQuery, minMaxIdQuery sq.SelectBuilder, page Page, conn Conn, lockFactory lock.LockFactory) ([]Build, Pagination, error) {
-	conn.SetSession("buildFactory-getBuildsWithPagination")
 	var (
 		rows    *sql.Rows
 		err     error
@@ -262,7 +262,8 @@ func getBuildsWithPagination(buildsQuery, minMaxIdQuery sq.SelectBuilder, page P
 			OrderBy("b.id ASC")
 	}
 
-	rows, err = buildsQuery.RunWith(conn).Query()
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "buildFactory-getBuildsWithPagination")
+	rows, err = buildsQuery.RunWith(conn).QueryContext(ctx)
 	if err != nil {
 		return nil, Pagination{}, err
 	}
@@ -293,7 +294,7 @@ func getBuildsWithPagination(buildsQuery, minMaxIdQuery sq.SelectBuilder, page P
 	var minID, maxID int
 	err = minMaxIdQuery.
 		RunWith(conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&maxID, &minID)
 	if err != nil {
 		return nil, Pagination{}, err

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"strings"
 
 	"code.cloudfoundry.org/lager"
@@ -27,30 +28,29 @@ func NewResourceCacheLifecycle(conn Conn) ResourceCacheLifecycle {
 }
 
 func (f *resourceCacheLifecycle) CleanBuildImageResourceCaches(logger lager.Logger) error {
-	f.conn.SetSession("resourceCacheLifecycle-CleanBuildImageResourceCaches")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceCacheLifecycle-CleanBuildImageResourceCaches")
 	_, err := sq.Delete("build_image_resource_caches birc USING builds b").
 		Where("birc.build_id = b.id").
 		Where(sq.Expr("((now() - b.end_time) > '24 HOURS'::INTERVAL)")).
 		Where(sq.Eq{"job_id": nil}).
 		RunWith(f.conn).
-		Exec()
+		ExecContext(ctx)
 	return err
 }
 
 func (f *resourceCacheLifecycle) CleanUsesForFinishedBuilds(logger lager.Logger) error {
-	f.conn.SetSession("resourceCacheLifecycle-CleanUsesForFinishedBuilds")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceCacheLifecycle-CleanUsesForFinishedBuilds")
 	_, err := psql.Delete("resource_cache_uses rcu USING builds b").
 		Where(sq.And{
 			sq.Expr("rcu.build_id = b.id"),
 			sq.Expr("b.interceptible = false"),
 		}).
 		RunWith(f.conn).
-		Exec()
+		ExecContext(ctx)
 	return err
 }
 
 func (f *resourceCacheLifecycle) CleanUpInvalidCaches(logger lager.Logger) error {
-	f.conn.SetSession("resourceCacheLifecycle-CleanUpInvalidCaches")
 	stillInUseCacheIds, _, err := sq.
 		Select("resource_cache_id").
 		From("resource_cache_uses").
@@ -104,7 +104,8 @@ func (f *resourceCacheLifecycle) CleanUpInvalidCaches(logger lager.Logger) error
 		return err
 	}
 
-	rows, err := f.conn.Query(query, args...)
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceCacheLifecycle-CleanUpInvalidCaches")
+	rows, err := f.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code.Name() == pqFKeyViolationErrCode {
 			// this can happen if a use or resource cache is created referencing the
@@ -146,14 +147,14 @@ func (f *resourceCacheLifecycle) CleanUsesForPausedPipelineResources() error {
 		return err
 	}
 
-	f.conn.SetSession("resourceCacheLifecycle-CleanUsesForPausedPipelineResources")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceCacheLifecycle-CleanUsesForPausedPipelineResources")
 	_, err = psql.Delete("resource_cache_uses rcu USING resources r").
 		Where(sq.And{
 			sq.Expr("r.pipeline_id NOT IN (" + pausedPipelineIds + ")"),
 			sq.Expr("rcu.resource_id = r.id"),
 		}).
 		RunWith(f.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }

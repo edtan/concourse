@@ -203,7 +203,6 @@ func (worker *gardenWorker) FindOrCreateContainer(
 	} else {
 
 		logger.Debug("creating-container-in-db")
-		worker.dbWorker.SetSession(fmt.Sprintf("%s.creating-container-in-db", logger.SessionName()))
 		creatingContainer, err = worker.dbWorker.CreateContainer(
 			owner,
 			metadata,
@@ -215,7 +214,6 @@ func (worker *gardenWorker) FindOrCreateContainer(
 			}
 		}
 		logger.Debug("created-creating-container-in-db")
-		worker.dbWorker.SetSession(fmt.Sprintf("%s.created-creating-container-in-db", logger.SessionName()))
 		containerHandle = creatingContainer.Handle()
 	}
 
@@ -233,7 +231,6 @@ func (worker *gardenWorker) FindOrCreateContainer(
 	if createdContainer != nil {
 		logger = logger.WithData(lager.Data{"container": containerHandle})
 		logger.Debug("found-created-container-in-db")
-		worker.dbWorker.SetSession(fmt.Sprintf("%s.found-created-container-in-db", logger.SessionName()))
 
 		if gardenContainer == nil {
 			return nil, garden.ContainerNotFoundError{Handle: containerHandle}
@@ -278,7 +275,6 @@ func (worker *gardenWorker) FindOrCreateContainer(
 		}
 
 		logger.Debug("creating-garden-container")
-		worker.dbWorker.SetSession(fmt.Sprintf("%s.creating-garden-container", logger.SessionName()))
 
 		gardenContainer, err = worker.helper.createGardenContainer(containerSpec, fetchedImage, creatingContainer.Handle(), bindMounts)
 		if err != nil {
@@ -295,7 +291,6 @@ func (worker *gardenWorker) FindOrCreateContainer(
 	}
 
 	logger.Debug("created-container-in-garden")
-	worker.dbWorker.SetSession(fmt.Sprintf("%s.created-container-in-garden", logger.SessionName()))
 
 	metric.ContainersCreated.Inc()
 	createdContainer, err = creatingContainer.Created()
@@ -308,7 +303,6 @@ func (worker *gardenWorker) FindOrCreateContainer(
 	}
 
 	logger.Debug("created-container-in-db")
-	worker.dbWorker.SetSession(fmt.Sprintf("%s.created-container-in-db", logger.SessionName()))
 
 	return worker.helper.constructGardenWorkerContainer(
 		logger,

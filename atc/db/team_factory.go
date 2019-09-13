@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 
@@ -44,7 +45,7 @@ func (factory *teamFactory) createTeam(t atc.Team, admin bool) (Team, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("teamFactory-createTeam")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "teamFactory-createTeam")
 
 	auth, err := json.Marshal(t.Auth)
 	if err != nil {
@@ -56,7 +57,7 @@ func (factory *teamFactory) createTeam(t atc.Team, admin bool) (Team, error) {
 		Values(t.Name, auth, admin).
 		Suffix("RETURNING id, name, admin, auth").
 		RunWith(tx).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	team := &team{
 		conn:        factory.conn,
@@ -90,12 +91,12 @@ func (factory *teamFactory) FindTeam(teamName string) (Team, bool, error) {
 		lockFactory: factory.lockFactory,
 	}
 
-	factory.conn.SetSession("teamFactory-FindTeam")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "teamFactory-FindTeam")
 	row := psql.Select("id, name, admin, auth").
 		From("teams").
 		Where(sq.Eq{"LOWER(name)": strings.ToLower(teamName)}).
 		RunWith(factory.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := factory.scanTeam(team, row)
 
@@ -110,12 +111,12 @@ func (factory *teamFactory) FindTeam(teamName string) (Team, bool, error) {
 }
 
 func (factory *teamFactory) GetTeams() ([]Team, error) {
-	factory.conn.SetSession("teamFactory-GetTeams")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "teamFactory-GetTeams")
 	rows, err := psql.Select("id, name, admin, auth").
 		From("teams").
 		OrderBy("id ASC").
 		RunWith(factory.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +142,12 @@ func (factory *teamFactory) GetTeams() ([]Team, error) {
 }
 
 func (factory *teamFactory) CreateDefaultTeamIfNotExists() (Team, error) {
-	factory.conn.SetSession("teamFactory-CreateDefaultTeamIfNotExists")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "teamFactory-CreateDefaultTeamIfNotExists")
 	_, err := psql.Update("teams").
 		Set("admin", true).
 		Where(sq.Eq{"LOWER(name)": strings.ToLower(atc.DefaultTeamName)}).
 		RunWith(factory.conn).
-		Exec()
+		ExecContext(ctx)
 
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err

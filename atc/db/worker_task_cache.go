@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	sq "github.com/Masterminds/squirrel"
@@ -20,7 +21,6 @@ type UsedWorkerTaskCache struct {
 func (wtc WorkerTaskCache) findOrCreate(
 	tx Tx,
 ) (*UsedWorkerTaskCache, error) {
-	tx.SetSession("WorkerTaskCache-findOrCreate")
 	uwtc, found, err := wtc.find(tx)
 	if err != nil {
 		return nil, err
@@ -28,6 +28,7 @@ func (wtc WorkerTaskCache) findOrCreate(
 
 	if !found {
 		var id int
+		ctx := context.WithValue(context.Background(), ctxQueryNameKey, "WorkerTaskCache-findOrCreate")
 		err = psql.Insert("worker_task_caches").
 			Columns(
 				"worker_name",
@@ -40,7 +41,7 @@ func (wtc WorkerTaskCache) findOrCreate(
 					RETURNING id
 				`).
 			RunWith(tx).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&id)
 		if err != nil {
 			return nil, err
@@ -56,6 +57,7 @@ func (wtc WorkerTaskCache) findOrCreate(
 }
 
 func (workerTaskCache WorkerTaskCache) find(runner sq.Runner) (*UsedWorkerTaskCache, bool, error) {
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerTaskCache-find")
 	var id int
 	err := psql.Select("id").
 		From("worker_task_caches").
@@ -64,7 +66,7 @@ func (workerTaskCache WorkerTaskCache) find(runner sq.Runner) (*UsedWorkerTaskCa
 			"task_cache_id": workerTaskCache.TaskCache.ID(),
 		}).
 		RunWith(runner).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -81,7 +83,6 @@ func (workerTaskCache WorkerTaskCache) find(runner sq.Runner) (*UsedWorkerTaskCa
 }
 
 func removeUnusedWorkerTaskCaches(tx Tx, pipelineID int, jobConfigs []atc.JobConfig) error {
-	tx.SetSession("removeUnusedWorkerTaskCaches")
 	steps := make(map[string][]string)
 	for _, jobConfig := range jobConfigs {
 		for _, jobConfigPlan := range jobConfig.Plan {
@@ -96,6 +97,7 @@ func removeUnusedWorkerTaskCaches(tx Tx, pipelineID int, jobConfigs []atc.JobCon
 		query = append(query, sq.And{sq.Eq{"j.name": jobName}, sq.NotEq{"tc.step_name": stepNames}})
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerTaskCache-removeUnusedWorkerTaskCaches")
 	_, err := psql.Delete("task_caches tc USING jobs j").
 		Where(
 			sq.Or{
@@ -107,7 +109,7 @@ func removeUnusedWorkerTaskCaches(tx Tx, pipelineID int, jobConfigs []atc.JobCon
 		Where(sq.Expr("j.id = tc.job_id")).
 		Where(sq.Eq{"j.pipeline_id": pipelineID}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }

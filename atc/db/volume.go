@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -219,7 +220,7 @@ func (volume *createdVolume) TaskIdentifier() (string, string, string, error) {
 	var jobName string
 	var stepName string
 
-	volume.conn.SetSession("createdVolume-TaskIdentifier")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdVolume-TaskIdentifier")
 	err := psql.Select("p.name, j.name, tc.step_name").
 		From("worker_task_caches wtc").
 		LeftJoin("task_caches tc on tc.id = wtc.task_cache_id").
@@ -229,7 +230,7 @@ func (volume *createdVolume) TaskIdentifier() (string, string, string, error) {
 			"wtc.id": volume.workerTaskCacheID,
 		}).
 		RunWith(volume.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&pipelineName, &jobName, &stepName)
 	if err != nil {
 		return "", "", "", err
@@ -243,7 +244,7 @@ func (volume *createdVolume) findVolumeResourceTypeByCacheID(resourceCacheID int
 	var sqBaseResourceTypeID sql.NullInt64
 	var sqResourceCacheID sql.NullInt64
 
-	volume.conn.SetSession("createdVolume-findVolumeResourceTypeByCacheID")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdVolume-findVolumeResourceTypeByCacheID")
 	err := psql.Select("rc.version, rcfg.base_resource_type_id, rcfg.resource_cache_id").
 		From("resource_caches rc").
 		LeftJoin("resource_configs rcfg ON rcfg.id = rc.resource_config_id").
@@ -251,7 +252,7 @@ func (volume *createdVolume) findVolumeResourceTypeByCacheID(resourceCacheID int
 			"rc.id": resourceCacheID,
 		}).
 		RunWith(volume.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&versionString, &sqBaseResourceTypeID, &sqResourceCacheID)
 	if err != nil {
 		return nil, err
@@ -294,7 +295,7 @@ func (volume *createdVolume) findWorkerBaseResourceTypeByID(workerBaseResourceTy
 	var name string
 	var version string
 
-	volume.conn.SetSession("createdVolume-findWorkerBaseResourceTypeByID")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdVolume-findWorkerBaseResourceTypeByID")
 	err := psql.Select("brt.name, wbrt.version").
 		From("worker_base_resource_types wbrt").
 		LeftJoin("base_resource_types brt ON brt.id = wbrt.base_resource_type_id").
@@ -303,7 +304,7 @@ func (volume *createdVolume) findWorkerBaseResourceTypeByID(workerBaseResourceTy
 			"wbrt.worker_name": volume.workerName,
 		}).
 		RunWith(volume.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&name, &version)
 	if err != nil {
 		return nil, err
@@ -322,7 +323,7 @@ func (volume *createdVolume) findWorkerBaseResourceTypeByBaseResourceTypeID(base
 	var name string
 	var version string
 
-	volume.conn.SetSession("createdVolume-findWorkerBaseResourceTypeByBaseResourceTypeID")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdVolume-findWorkerBaseResourceTypeByBaseResourceTypeID")
 	err := psql.Select("wbrt.id, brt.name, wbrt.version").
 		From("worker_base_resource_types wbrt").
 		LeftJoin("base_resource_types brt ON brt.id = wbrt.base_resource_type_id").
@@ -331,7 +332,7 @@ func (volume *createdVolume) findWorkerBaseResourceTypeByBaseResourceTypeID(base
 			"wbrt.worker_name": volume.workerName,
 		}).
 		RunWith(volume.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id, &name, &version)
 	if err != nil {
 		return nil, err
@@ -352,7 +353,6 @@ func (volume *createdVolume) InitializeResourceCache(resourceCache UsedResourceC
 	}
 
 	defer tx.Rollback()
-	tx.SetSession("createdVolume-InitializeResourceCache")
 
 	workerResourceCache, err := WorkerResourceCache{
 		WorkerName:    volume.WorkerName(),
@@ -362,12 +362,13 @@ func (volume *createdVolume) InitializeResourceCache(resourceCache UsedResourceC
 		return err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdVolume-InitializeResourceCache")
 	rows, err := psql.Update("volumes").
 		Set("worker_resource_cache_id", workerResourceCache.ID).
 		Set("team_id", nil).
 		Where(sq.Eq{"id": volume.id}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code.Name() == pqUniqueViolationErrCode {
 			// another volume was 'blessed' as the cache volume - leave this one
@@ -405,7 +406,6 @@ func (volume *createdVolume) InitializeArtifact(name string, buildID int) (Worke
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("createdVolume-InitializeArtifact")
 
 	atcWorkerArtifact := atc.WorkerArtifact{
 		Name:    name,
@@ -417,11 +417,12 @@ func (volume *createdVolume) InitializeArtifact(name string, buildID int) (Worke
 		return nil, err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdVolume-InitializeArtifact")
 	rows, err := psql.Update("volumes").
 		Set("worker_artifact_id", workerArtifact.ID()).
 		Where(sq.Eq{"id": volume.id}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +451,6 @@ func (volume *createdVolume) InitializeTaskCache(jobID int, stepName string, pat
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("createdVolume-InitializeTaskCache")
 
 	usedTaskCache, err := usedTaskCache{
 		jobID:    jobID,
@@ -469,12 +469,13 @@ func (volume *createdVolume) InitializeTaskCache(jobID int, stepName string, pat
 		return err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdVolume-InitializeTaskCache")
 	// release other old volumes for gc
 	_, err = psql.Update("volumes").
 		Set("worker_task_cache_id", nil).
 		Where(sq.Eq{"worker_task_cache_id": usedWorkerTaskCache.ID}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -483,7 +484,7 @@ func (volume *createdVolume) InitializeTaskCache(jobID int, stepName string, pat
 		Set("worker_task_cache_id", usedWorkerTaskCache.ID).
 		Where(sq.Eq{"id": volume.id}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code.Name() == pqUniqueViolationErrCode {
 			// another volume was 'blessed' as the cache volume - leave this one
@@ -518,7 +519,6 @@ func (volume *createdVolume) CreateChildForContainer(container CreatingContainer
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("createdVolume-CreateChildForContainer")
 
 	handle, err := uuid.NewV4()
 	if err != nil {
@@ -547,13 +547,14 @@ func (volume *createdVolume) CreateChildForContainer(container CreatingContainer
 		columnValues = append(columnValues, volume.teamID)
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdVolume-CreateChildForContainer")
 	var volumeID int
 	err = psql.Insert("volumes").
 		Columns(columnNames...).
 		Values(columnValues...).
 		Suffix("RETURNING id").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&volumeID)
 	if err != nil {
 		return nil, err
@@ -625,14 +626,14 @@ func (volume *destroyingVolume) Handle() string     { return volume.handle }
 func (volume *destroyingVolume) WorkerName() string { return volume.workerName }
 
 func (volume *destroyingVolume) Destroy() (bool, error) {
-	volume.conn.SetSession("destroyingVolume-Destroy")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "destroyingVolume-Destroy")
 	rows, err := psql.Delete("volumes").
 		Where(sq.Eq{
 			"id":    volume.id,
 			"state": VolumeStateDestroying,
 		}).
 		RunWith(volume.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -666,14 +667,14 @@ func (volume *failedVolume) Handle() string     { return volume.handle }
 func (volume *failedVolume) WorkerName() string { return volume.workerName }
 
 func (volume *failedVolume) Destroy() (bool, error) {
-	volume.conn.SetSession("failedVolume-Destroy")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "failedVolume-Destroy")
 	rows, err := psql.Delete("volumes").
 		Where(sq.Eq{
 			"id":    volume.id,
 			"state": VolumeStateFailed,
 		}).
 		RunWith(volume.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -691,7 +692,7 @@ func (volume *failedVolume) Destroy() (bool, error) {
 }
 
 func volumeStateTransition(volumeID int, conn Conn, from, to VolumeState) error {
-	conn.SetSession("volume-volumeStateTransition")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "volume-volumeStateTransition")
 	rows, err := psql.Update("volumes").
 		Set("state", string(to)).
 		Where(sq.And{
@@ -702,7 +703,7 @@ func volumeStateTransition(volumeID int, conn Conn, from, to VolumeState) error 
 			},
 		}).
 		RunWith(conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}

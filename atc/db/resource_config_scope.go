@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"time"
@@ -77,7 +78,6 @@ func saveVersions(conn Conn, rcsID int, versions []atc.Version) error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("saveVersions")
 
 	for _, version := range versions {
 		_, err = saveResourceVersion(tx, rcsID, version, nil)
@@ -120,14 +120,14 @@ func (r *resourceConfigScope) FindVersion(v atc.Version) (ResourceConfigVersion,
 		return nil, false, err
 	}
 
-	r.conn.SetSession("resourceConfigScope-FindVersion")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigScope-FindVersion")
 	row := resourceConfigVersionQuery.
 		Where(sq.Eq{
 			"v.resource_config_scope_id": r.id,
 		}).
 		Where(sq.Expr("v.version_md5 = md5(?)", versionByte)).
 		RunWith(r.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err = scanResourceConfigVersion(rcv, row)
 	if err != nil {
@@ -141,7 +141,7 @@ func (r *resourceConfigScope) FindVersion(v atc.Version) (ResourceConfigVersion,
 }
 
 func (r *resourceConfigScope) LatestVersion() (ResourceConfigVersion, bool, error) {
-	r.conn.SetSession("resourceConfigScope-LatestVersion")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigScope-LatestVersion")
 	rcv := &resourceConfigVersion{
 		conn:                r.conn,
 		resourceConfigScope: r,
@@ -152,7 +152,7 @@ func (r *resourceConfigScope) LatestVersion() (ResourceConfigVersion, bool, erro
 		OrderBy("v.check_order DESC").
 		Limit(1).
 		RunWith(r.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanResourceConfigVersion(rcv, row)
 	if err != nil {
@@ -168,19 +168,19 @@ func (r *resourceConfigScope) LatestVersion() (ResourceConfigVersion, bool, erro
 func (r *resourceConfigScope) SetCheckError(cause error) error {
 	var err error
 
-	r.conn.SetSession("resourceConfigScope-SetCheckError")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigScope-SetCheckError")
 	if cause == nil {
 		_, err = psql.Update("resource_config_scopes").
 			Set("check_error", nil).
 			Where(sq.Eq{"id": r.id}).
 			RunWith(r.conn).
-			Exec()
+			ExecContext(ctx)
 	} else {
 		_, err = psql.Update("resource_config_scopes").
 			Set("check_error", cause.Error()).
 			Where(sq.Eq{"id": r.id}).
 			RunWith(r.conn).
-			Exec()
+			ExecContext(ctx)
 	}
 
 	return err
@@ -205,7 +205,6 @@ func (r *resourceConfigScope) UpdateLastCheckStartTime(
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("resourceConfigScope-UpdateLastCheckStartTime")
 
 	params := []interface{}{r.id}
 
@@ -243,7 +242,6 @@ func (r *resourceConfigScope) UpdateLastCheckEndTime() (bool, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("resourceConfigScope-UpdateLastCheckEndTime")
 
 	updated, err := checkIfRowsUpdated(tx, `
 			UPDATE resource_config_scopes
@@ -267,7 +265,6 @@ func (r *resourceConfigScope) UpdateLastCheckEndTime() (bool, error) {
 }
 
 func saveResourceVersion(tx Tx, rcsID int, version atc.Version, metadata ResourceConfigMetadataFields) (bool, error) {
-	tx.SetSession("saveResourceVersion")
 	versionJSON, err := json.Marshal(version)
 	if err != nil {
 		return false, err
@@ -279,7 +276,8 @@ func saveResourceVersion(tx Tx, rcsID int, version atc.Version, metadata Resourc
 	}
 
 	var checkOrder int
-	err = tx.QueryRow(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigScope-saveResourceVersion")
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO resource_config_versions (resource_config_scope_id, version, version_md5, metadata)
 		SELECT $1, $2, md5($3), $4
 		ON CONFLICT (resource_config_scope_id, version_md5)
@@ -298,8 +296,8 @@ func saveResourceVersion(tx Tx, rcsID int, version atc.Version, metadata Resourc
 // the desired order to change; existing versions will be re-ordered since
 // we add them in the desired order.
 func incrementCheckOrder(tx Tx, rcsID int, version string) error {
-	tx.SetSession("incrementCheckOrder")
-	_, err := tx.Exec(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigScope-incrementCheckOrder")
+	_, err := tx.ExecContext(ctx, `
 		WITH max_checkorder AS (
 			SELECT max(check_order) co
 			FROM resource_config_versions
@@ -316,7 +314,7 @@ func incrementCheckOrder(tx Tx, rcsID int, version string) error {
 }
 
 func bumpCacheIndexForPipelinesUsingResourceConfigScope(conn Conn, rcsID int) error {
-	conn.SetSession("resourceConfigScope-bumpCacheIndexForPipelinesUsingResourceConfigScope")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigScope-bumpCacheIndexForPipelinesUsingResourceConfigScope")
 	rows, err := psql.Select("p.id").
 		From("pipelines p").
 		Join("resources r ON r.pipeline_id = p.id").
@@ -324,7 +322,7 @@ func bumpCacheIndexForPipelinesUsingResourceConfigScope(conn Conn, rcsID int) er
 			"r.resource_config_scope_id": rcsID,
 		}).
 		RunWith(conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -347,7 +345,7 @@ func bumpCacheIndexForPipelinesUsingResourceConfigScope(conn Conn, rcsID int) er
 				"id": p,
 			}).
 			RunWith(conn).
-			Exec()
+			ExecContext(ctx)
 		if err != nil {
 			return err
 		}

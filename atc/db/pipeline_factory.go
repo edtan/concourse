@@ -1,6 +1,8 @@
 package db
 
 import (
+	"context"
+
 	sq "github.com/Masterminds/squirrel"
 	"github.com/concourse/concourse/atc/db/lock"
 )
@@ -25,12 +27,12 @@ func NewPipelineFactory(conn Conn, lockFactory lock.LockFactory) PipelineFactory
 }
 
 func (f *pipelineFactory) VisiblePipelines(teamNames []string) ([]Pipeline, error) {
-	f.conn.SetSession("pipelineFactory-VisiblePipelines")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipelineFactory-VisiblePipelines")
 	rows, err := pipelinesQuery.
 		Where(sq.Eq{"t.name": teamNames}).
 		OrderBy("team_id ASC", "ordering ASC").
 		RunWith(f.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +47,7 @@ func (f *pipelineFactory) VisiblePipelines(teamNames []string) ([]Pipeline, erro
 		Where(sq.Eq{"public": true}).
 		OrderBy("team_id ASC", "ordering ASC").
 		RunWith(f.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -59,11 +61,11 @@ func (f *pipelineFactory) VisiblePipelines(teamNames []string) ([]Pipeline, erro
 }
 
 func (f *pipelineFactory) AllPipelines() ([]Pipeline, error) {
-	f.conn.SetSession("pipelineFactory-AllPipelines")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipelineFactory-AllPipelines")
 	rows, err := pipelinesQuery.
 		OrderBy("team_id ASC", "ordering ASC").
 		RunWith(f.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}

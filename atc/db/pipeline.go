@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -136,8 +137,8 @@ func (p *pipeline) Paused() bool                 { return p.paused }
 
 // IMPORTANT: This method is broken with the new resource config versions changes
 func (p *pipeline) Causality(versionedResourceID int) ([]Cause, error) {
-	p.conn.SetSession("pipeline-Causality")
-	rows, err := p.conn.Query(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Causality")
+	rows, err := p.conn.QueryContext(ctx, `
 		WITH RECURSIVE causality(versioned_resource_id, build_id) AS (
 				SELECT bi.versioned_resource_id, bi.build_id
 				FROM build_inputs bi
@@ -184,14 +185,14 @@ func (p *pipeline) Causality(versionedResourceID int) ([]Cause, error) {
 }
 
 func (p *pipeline) CheckPaused() (bool, error) {
-	p.conn.SetSession("pipeline-CheckPaused")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-CheckPaused")
 	var paused bool
 
 	err := psql.Select("paused").
 		From("pipelines").
 		Where(sq.Eq{"id": p.id}).
 		RunWith(p.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&paused)
 
 	if err != nil {
@@ -201,10 +202,10 @@ func (p *pipeline) CheckPaused() (bool, error) {
 	return paused, nil
 }
 func (p *pipeline) Reload() (bool, error) {
-	p.conn.SetSession("pipeline-Reload")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Reload")
 	row := pipelinesQuery.Where(sq.Eq{"p.id": p.id}).
 		RunWith(p.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanPipeline(p, row)
 	if err != nil {
@@ -224,7 +225,7 @@ func (p *pipeline) CreateJobBuild(jobName string) (Build, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("pipeline-CreateJobBuild")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-CreateJobBuild")
 
 	buildName, jobID, err := getNewBuildNameForJob(tx, jobName, p.id)
 	if err != nil {
@@ -237,7 +238,7 @@ func (p *pipeline) CreateJobBuild(jobName string) (Build, error) {
 		Values(buildName, jobID, p.teamID, "pending", true).
 		Suffix("RETURNING id").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&buildID)
 	if err != nil {
 		return nil, err
@@ -247,7 +248,7 @@ func (p *pipeline) CreateJobBuild(jobName string) (Build, error) {
 	err = scanBuild(build, buildsQuery.
 		Where(sq.Eq{"b.id": buildID}).
 		RunWith(tx).
-		QueryRow(),
+		QueryRowContext(ctx),
 		p.conn.EncryptionStrategy(),
 	)
 	if err != nil {
@@ -270,7 +271,7 @@ func (p *pipeline) CreateJobBuild(jobName string) (Build, error) {
 func (p *pipeline) GetAllPendingBuilds() (map[string][]Build, error) {
 	builds := map[string][]Build{}
 
-	p.conn.SetSession("pipeline-GetAllPendingBuilds")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-GetAllPendingBuilds")
 	rows, err := buildsQuery.
 		Where(sq.Eq{
 			"b.status":      BuildStatusPending,
@@ -279,7 +280,7 @@ func (p *pipeline) GetAllPendingBuilds() (map[string][]Build, error) {
 		}).
 		OrderBy("b.id").
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +305,6 @@ func (p *pipeline) GetAllPendingBuilds() (map[string][]Build, error) {
 // GetResourceVersion to get all the attributes for that version of the
 // resource.
 func (p *pipeline) ResourceVersion(resourceConfigVersionID int) (atc.ResourceVersion, bool, error) {
-	p.conn.SetSession("pipeline-ResourceVersion")
 	rv := atc.ResourceVersion{}
 	var (
 		versionBytes  string
@@ -320,13 +320,14 @@ func (p *pipeline) ResourceVersion(resourceConfigVersionID int) (atc.ResourceVer
 			AND r.id = d.resource_id
 		)`
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-ResourceVersion")
 	err := psql.Select("v.id", "v.version", "v.metadata", enabled).
 		From("resource_config_versions v").
 		Where(sq.Eq{
 			"v.id": resourceConfigVersionID,
 		}).
 		RunWith(p.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&rv.ID, &versionBytes, &metadataBytes, &rv.Enabled)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -350,7 +351,7 @@ func (p *pipeline) ResourceVersion(resourceConfigVersionID int) (atc.ResourceVer
 }
 
 func (p *pipeline) GetBuildsWithVersionAsInput(resourceID, resourceConfigVersionID int) ([]Build, error) {
-	p.conn.SetSession("pipeline-GetBuildsWithVersionAsInput")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-GetBuildsWithVersionAsInput")
 	rows, err := buildsQuery.
 		Join("build_resource_config_version_inputs bi ON bi.build_id = b.id").
 		Join("resource_config_versions rcv ON rcv.version_md5 = bi.version_md5").
@@ -359,7 +360,7 @@ func (p *pipeline) GetBuildsWithVersionAsInput(resourceID, resourceConfigVersion
 			"bi.resource_id": resourceID,
 		}).
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +380,7 @@ func (p *pipeline) GetBuildsWithVersionAsInput(resourceID, resourceConfigVersion
 }
 
 func (p *pipeline) GetBuildsWithVersionAsOutput(resourceID, resourceConfigVersionID int) ([]Build, error) {
-	p.conn.SetSession("pipeline-GetBuildsWithVersionAsOutput")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-GetBuildsWithVersionAsOutput")
 	rows, err := buildsQuery.
 		Join("build_resource_config_version_outputs bo ON bo.build_id = b.id").
 		Join("resource_config_versions rcv ON rcv.version_md5 = bo.version_md5").
@@ -388,7 +389,7 @@ func (p *pipeline) GetBuildsWithVersionAsOutput(resourceID, resourceConfigVersio
 			"bo.resource_id": resourceID,
 		}).
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -423,11 +424,11 @@ func (p *pipeline) ResourceByID(id int) (Resource, bool, error) {
 }
 
 func (p *pipeline) resource(where map[string]interface{}) (Resource, bool, error) {
-	p.conn.SetSession("pipeline-resource")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-resource")
 	row := resourcesQuery.
 		Where(where).
 		RunWith(p.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	resource := &resource{conn: p.conn, lockFactory: p.lockFactory}
 	err := scanResource(resource, row)
@@ -457,12 +458,12 @@ func (p *pipeline) Resources() (Resources, error) {
 }
 
 func (p *pipeline) ResourceTypes() (ResourceTypes, error) {
-	p.conn.SetSession("pipeline-ResourceTypes")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-ResourceTypes")
 	rows, err := resourceTypesQuery.
 		Where(sq.Eq{"r.pipeline_id": p.id}).
 		OrderBy("r.name").
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -498,11 +499,11 @@ func (p *pipeline) ResourceTypeByID(id int) (ResourceType, bool, error) {
 }
 
 func (p *pipeline) resourceType(where map[string]interface{}) (ResourceType, bool, error) {
-	p.conn.SetSession("pipeline-resourceType")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-resourceType")
 	row := resourceTypesQuery.
 		Where(where).
 		RunWith(p.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	resourceType := &resourceType{conn: p.conn, lockFactory: p.lockFactory}
 	err := scanResourceType(resourceType, row)
@@ -518,12 +519,12 @@ func (p *pipeline) resourceType(where map[string]interface{}) (ResourceType, boo
 }
 
 func (p *pipeline) Job(name string) (Job, bool, error) {
-	p.conn.SetSession("pipeline-Job")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Job")
 	row := jobsQuery.Where(sq.Eq{
 		"j.name":        name,
 		"j.active":      true,
 		"j.pipeline_id": p.id,
-	}).RunWith(p.conn).QueryRow()
+	}).RunWith(p.conn).QueryRowContext(ctx)
 
 	job := &job{conn: p.conn, lockFactory: p.lockFactory}
 	err := scanJob(job, row)
@@ -540,7 +541,7 @@ func (p *pipeline) Job(name string) (Job, bool, error) {
 }
 
 func (p *pipeline) Jobs() (Jobs, error) {
-	p.conn.SetSession("pipeline-Jobs")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Jobs")
 	rows, err := jobsQuery.
 		Where(sq.Eq{
 			"pipeline_id": p.id,
@@ -548,7 +549,7 @@ func (p *pipeline) Jobs() (Jobs, error) {
 		}).
 		OrderBy("j.id ASC").
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +559,7 @@ func (p *pipeline) Jobs() (Jobs, error) {
 }
 
 func (p *pipeline) Dashboard() (Dashboard, error) {
-	p.conn.SetSession("pipeline-Dashboard")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Dashboard")
 	dashboard := Dashboard{}
 
 	rows, err := jobsQuery.
@@ -568,7 +569,7 @@ func (p *pipeline) Dashboard() (Dashboard, error) {
 		}).
 		OrderBy("j.id ASC").
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -608,90 +609,90 @@ func (p *pipeline) Dashboard() (Dashboard, error) {
 }
 
 func (p *pipeline) Pause() error {
-	p.conn.SetSession("pipeline-Pause")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Pause")
 	_, err := psql.Update("pipelines").
 		Set("paused", true).
 		Where(sq.Eq{
 			"id": p.id,
 		}).
 		RunWith(p.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
 
 func (p *pipeline) Unpause() error {
-	p.conn.SetSession("pipeline-Unpause")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Unpause")
 	_, err := psql.Update("pipelines").
 		Set("paused", false).
 		Where(sq.Eq{
 			"id": p.id,
 		}).
 		RunWith(p.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
 
 func (p *pipeline) Hide() error {
-	p.conn.SetSession("pipeline-Hide")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Hide")
 	_, err := psql.Update("pipelines").
 		Set("public", false).
 		Where(sq.Eq{
 			"id": p.id,
 		}).
 		RunWith(p.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
 
 func (p *pipeline) Expose() error {
-	p.conn.SetSession("pipeline-Expose")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Expose")
 	_, err := psql.Update("pipelines").
 		Set("public", true).
 		Where(sq.Eq{
 			"id": p.id,
 		}).
 		RunWith(p.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
 
 func (p *pipeline) Rename(name string) error {
-	p.conn.SetSession("pipeline-Rename")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Rename")
 	_, err := psql.Update("pipelines").
 		Set("name", name).
 		Where(sq.Eq{
 			"id": p.id,
 		}).
 		RunWith(p.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
 
 func (p *pipeline) Destroy() error {
-	p.conn.SetSession("pipeline-Destroy")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-Destroy")
 	_, err := psql.Delete("pipelines").
 		Where(sq.Eq{
 			"id": p.id,
 		}).
 		RunWith(p.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
 
 func (p *pipeline) LoadVersionsDB() (*algorithm.VersionsDB, error) {
-	p.conn.SetSession("pipeline-LoadVersionsDB")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-LoadVersionsDB")
 	var cacheIndex int
 	err := psql.Select("cache_index").
 		From("pipelines").
 		Where(sq.Eq{"id": p.id}).
 		RunWith(p.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&cacheIndex)
 	if err != nil {
 		return nil, err
@@ -724,7 +725,7 @@ func (p *pipeline) LoadVersionsDB() (*algorithm.VersionsDB, error) {
 			"r.pipeline_id": p.id,
 		}).
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -757,7 +758,7 @@ func (p *pipeline) LoadVersionsDB() (*algorithm.VersionsDB, error) {
 			"r.pipeline_id": p.id,
 		}).
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -800,7 +801,7 @@ func (p *pipeline) LoadVersionsDB() (*algorithm.VersionsDB, error) {
 			"d.version_md5": nil,
 		}).
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -821,7 +822,7 @@ func (p *pipeline) LoadVersionsDB() (*algorithm.VersionsDB, error) {
 		From("jobs j").
 		Where(sq.Eq{"j.pipeline_id": p.id}).
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -843,7 +844,7 @@ func (p *pipeline) LoadVersionsDB() (*algorithm.VersionsDB, error) {
 		From("resources r").
 		Where(sq.Eq{"r.pipeline_id": p.id}).
 		RunWith(p.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -888,9 +889,9 @@ func (p *pipeline) DeleteBuildEventsByBuildIDs(buildIDs []int) error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("pipeline-DeleteBuildEventsByBuildIDs")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-DeleteBuildEventsByBuildIDs")
 
-	_, err = tx.Exec(`
+	_, err = tx.ExecContext(ctx, `
    DELETE FROM build_events
 	 WHERE build_id IN (`+strings.Join(indexStrings, ",")+`)
 	 `, interfaceBuildIDs...)
@@ -898,7 +899,7 @@ func (p *pipeline) DeleteBuildEventsByBuildIDs(buildIDs []int) error {
 		return err
 	}
 
-	_, err = tx.Exec(`
+	_, err = tx.ExecContext(ctx, `
 		UPDATE builds
 		SET reap_time = now()
 		WHERE id IN (`+strings.Join(indexStrings, ",")+`)
@@ -936,8 +937,8 @@ func (p *pipeline) AcquireSchedulingLock(logger lager.Logger, interval time.Dura
 		}
 	}()
 
-	p.conn.SetSession("pipeline-AcquireSchedulingLock")
-	result, err := p.conn.Exec(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-AcquireSchedulingLock")
+	result, err := p.conn.ExecContext(ctx, `
 		UPDATE pipelines
 		SET last_scheduled = now()
 		WHERE id = $1
@@ -968,7 +969,6 @@ func (p *pipeline) CreateOneOffBuild() (Build, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("pipeline-CreateOneOffBuild")
 
 	build := &build{conn: p.conn, lockFactory: p.lockFactory}
 	err = createBuild(tx, build, map[string]interface{}{
@@ -996,7 +996,6 @@ func (p *pipeline) CreateStartedBuild(plan atc.Plan) (Build, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("pipeline-CreateStartedBuild")
 
 	metadata, err := json.Marshal(plan)
 	if err != nil {
@@ -1049,8 +1048,8 @@ func (p *pipeline) CreateStartedBuild(plan atc.Plan) (Build, error) {
 }
 
 func (p *pipeline) incrementCheckOrderWhenNewerVersion(tx Tx, resourceID int, resourceType string, version string) error {
-	tx.SetSession("pipeline-incrementCheckOrderWhenNewerVersion")
-	_, err := tx.Exec(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-incrementCheckOrderWhenNewerVersion")
+	_, err := tx.ExecContext(ctx, `
 		WITH max_checkorder AS (
 			SELECT max(check_order) co
 			FROM versioned_resources
@@ -1069,13 +1068,13 @@ func (p *pipeline) incrementCheckOrderWhenNewerVersion(tx Tx, resourceID int, re
 }
 
 func (p *pipeline) getBuildsFrom(col string) (map[string]Build, error) {
-	p.conn.SetSession("pipeline-getBuildsFrom")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-getBuildsFrom")
 	rows, err := buildsQuery.
 		Where(sq.Eq{
 			"b.pipeline_id": p.id,
 		}).
 		Where(sq.Expr("j." + col + " = b.id")).
-		RunWith(p.conn).Query()
+		RunWith(p.conn).QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1097,12 +1096,12 @@ func (p *pipeline) getBuildsFrom(col string) (map[string]Build, error) {
 }
 
 func bumpCacheIndex(tx Tx, pipelineID int) error {
-	tx.SetSession("pipeline-bumpCacheIndex")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-bumpCacheIndex")
 	res, err := psql.Update("pipelines").
 		Set("cache_index", sq.Expr("cache_index + 1")).
 		Where(sq.Eq{"id": pipelineID}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -1120,10 +1119,10 @@ func bumpCacheIndex(tx Tx, pipelineID int) error {
 }
 
 func getNewBuildNameForJob(tx Tx, jobName string, pipelineID int) (string, int, error) {
-	tx.SetSession("pipeline-getNewBuildNameForJob")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-getNewBuildNameForJob")
 	var buildName string
 	var jobID int
-	err := tx.QueryRow(`
+	err := tx.QueryRowContext(ctx, `
 		UPDATE jobs
 		SET build_number_seq = build_number_seq + 1
 		WHERE name = $1 AND pipeline_id = $2
@@ -1133,12 +1132,12 @@ func getNewBuildNameForJob(tx Tx, jobName string, pipelineID int) (string, int, 
 }
 
 func resources(pipelineID int, conn Conn, lockFactory lock.LockFactory) (Resources, error) {
-	conn.SetSession("pipeline-resources")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "pipeline-resources")
 	rows, err := resourcesQuery.
 		Where(sq.Eq{"r.pipeline_id": pipelineID}).
 		OrderBy("r.name").
 		RunWith(conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}

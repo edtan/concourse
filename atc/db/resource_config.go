@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -80,7 +81,7 @@ func (r *resourceConfig) FindResourceConfigScopeByID(resourceConfigScopeID int, 
 		checkErrBlob sql.NullString
 	)
 
-	r.conn.SetSession("resourceConfig-FindResourceConfigScopeByID")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfig-FindResourceConfigScopeByID")
 	err := psql.Select("id, resource_id, resource_config_id, check_error").
 		From("resource_config_scopes").
 		Where(sq.Eq{
@@ -88,7 +89,7 @@ func (r *resourceConfig) FindResourceConfigScopeByID(resourceConfigScopeID int, 
 			"resource_config_id": r.id,
 		}).
 		RunWith(r.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id, &rID, &rcID, &checkErrBlob)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -125,7 +126,6 @@ func (r *resourceConfig) FindResourceConfigScopeByID(resourceConfigScopeID int, 
 }
 
 func (r *ResourceConfigDescriptor) findOrCreate(tx Tx, lockFactory lock.LockFactory, conn Conn) (ResourceConfig, error) {
-	tx.SetSession("ResourceConfigDescriptor-findOrCreate")
 	rc := &resourceConfig{
 		lockFactory: lockFactory,
 		conn:        conn,
@@ -171,6 +171,7 @@ func (r *ResourceConfigDescriptor) findOrCreate(tx Tx, lockFactory lock.LockFact
 	if !found {
 		hash := mapHash(r.Source)
 
+		ctx := context.WithValue(context.Background(), ctxQueryNameKey, "ResourceConfigDescriptor-findOrCreate")
 		var err error
 		err = psql.Insert("resource_configs").
 			Columns(
@@ -188,7 +189,7 @@ func (r *ResourceConfigDescriptor) findOrCreate(tx Tx, lockFactory lock.LockFact
 				RETURNING id
 			`, parentID, hash).
 			RunWith(tx).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&id)
 
 		if err != nil {
@@ -202,7 +203,6 @@ func (r *ResourceConfigDescriptor) findOrCreate(tx Tx, lockFactory lock.LockFact
 }
 
 func (r *ResourceConfigDescriptor) find(tx Tx, lockFactory lock.LockFactory, conn Conn) (ResourceConfig, bool, error) {
-	tx.SetSession("ResourceConfigDescriptor-find")
 	rc := &resourceConfig{
 		lockFactory: lockFactory,
 		conn:        conn,
@@ -259,10 +259,10 @@ func (r *ResourceConfigDescriptor) find(tx Tx, lockFactory lock.LockFactory, con
 }
 
 func (r *ResourceConfigDescriptor) findWithParentID(tx Tx, parentColumnName string, parentID int) (int, bool, error) {
-	tx.SetSession("ResourceConfigDescriptor-findWithParentID")
 	var id int
 	var whereClause sq.Eq
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "ResourceConfigDescriptor-findWithParentID")
 	err := psql.Select("id").
 		From("resource_configs").
 		Where(sq.Eq{
@@ -272,7 +272,7 @@ func (r *ResourceConfigDescriptor) findWithParentID(tx Tx, parentColumnName stri
 		Where(whereClause).
 		Suffix("FOR SHARE").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -286,7 +286,6 @@ func (r *ResourceConfigDescriptor) findWithParentID(tx Tx, parentColumnName stri
 }
 
 func findOrCreateResourceConfigScope(tx Tx, conn Conn, lockFactory lock.LockFactory, resourceConfig ResourceConfig, resource Resource, resourceTypes atc.VersionedResourceTypes) (ResourceConfigScope, error) {
-	tx.SetSession("findOrCreateResourceConfigScope")
 	var unique bool
 	var uniqueResource Resource
 	var resourceID *int
@@ -313,6 +312,7 @@ func findOrCreateResourceConfigScope(tx Tx, conn Conn, lockFactory lock.LockFact
 	var scopeID int
 	var checkErr error
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceconfig-findOrCreateResourceConfigScope")
 	rows, err := psql.Select("id, check_error").
 		From("resource_config_scopes").
 		Where(sq.Eq{
@@ -320,7 +320,7 @@ func findOrCreateResourceConfigScope(tx Tx, conn Conn, lockFactory lock.LockFact
 			"resource_config_id": resourceConfig.ID(),
 		}).
 		RunWith(tx).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func findOrCreateResourceConfigScope(tx Tx, conn Conn, lockFactory lock.LockFact
 				},
 			}).
 			RunWith(tx).
-			Exec()
+			ExecContext(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -365,7 +365,7 @@ func findOrCreateResourceConfigScope(tx Tx, conn Conn, lockFactory lock.LockFact
 				RETURNING id
 			`, resource.ID(), resourceConfig.ID()).
 			RunWith(tx).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&scopeID)
 		if err != nil {
 			return nil, err
@@ -380,7 +380,7 @@ func findOrCreateResourceConfigScope(tx Tx, conn Conn, lockFactory lock.LockFact
 				RETURNING id
 			`, resourceConfig.ID()).
 			RunWith(tx).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&scopeID)
 		if err != nil {
 			return nil, err

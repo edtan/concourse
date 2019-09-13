@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -185,10 +186,10 @@ func (b *build) IsAborted() bool      { return b.aborted }
 func (b *build) IsCompleted() bool    { return b.completed }
 
 func (b *build) Reload() (bool, error) {
-	b.conn.SetSession("build-Reload")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Reload")
 	row := buildsQuery.Where(sq.Eq{"b.id": b.id}).
 		RunWith(b.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanBuild(b, row, b.conn.EncryptionStrategy())
 	if err != nil {
@@ -202,7 +203,7 @@ func (b *build) Reload() (bool, error) {
 }
 
 func (b *build) Interceptible() (bool, error) {
-	b.conn.SetSession("build-Interceptible")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Interceptible")
 	var interceptible bool
 
 	err := psql.Select("interceptible").
@@ -211,7 +212,7 @@ func (b *build) Interceptible() (bool, error) {
 			"id": b.id,
 		}).
 		RunWith(b.conn).
-		QueryRow().Scan(&interceptible)
+		QueryRowContext(ctx).Scan(&interceptible)
 
 	if err != nil {
 		return true, err
@@ -221,14 +222,14 @@ func (b *build) Interceptible() (bool, error) {
 }
 
 func (b *build) SetInterceptible(i bool) error {
-	b.conn.SetSession("build-SetInterceptible")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-SetInterceptible")
 	rows, err := psql.Update("builds").
 		Set("interceptible", i).
 		Where(sq.Eq{
 			"id": b.id,
 		}).
 		RunWith(b.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -252,7 +253,6 @@ func (b *build) Start(plan atc.Plan) (bool, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("build-Start")
 
 	metadata, err := json.Marshal(plan)
 	if err != nil {
@@ -266,6 +266,7 @@ func (b *build) Start(plan atc.Plan) (bool, error) {
 
 	var startTime time.Time
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Start")
 	err = psql.Update("builds").
 		Set("status", BuildStatusStarted).
 		Set("start_time", sq.Expr("now()")).
@@ -280,7 +281,7 @@ func (b *build) Start(plan atc.Plan) (bool, error) {
 		}).
 		Suffix("RETURNING start_time").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&startTime)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -324,10 +325,10 @@ func (b *build) Finish(status BuildStatus) error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("build-Finish")
 
 	var endTime time.Time
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Finish")
 	err = psql.Update("builds").
 		Set("status", status).
 		Set("end_time", sq.Expr("now()")).
@@ -337,7 +338,7 @@ func (b *build) Finish(status BuildStatus) error {
 		Where(sq.Eq{"id": b.id}).
 		Suffix("RETURNING end_time").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&endTime)
 	if err != nil {
 		return err
@@ -351,7 +352,7 @@ func (b *build) Finish(status BuildStatus) error {
 		return err
 	}
 
-	_, err = tx.Exec(fmt.Sprintf(`
+	_, err = tx.ExecContext(ctx, fmt.Sprintf(`
 		DROP SEQUENCE %s
 	`, buildEventSeq(b.id)))
 	if err != nil {
@@ -364,7 +365,7 @@ func (b *build) Finish(status BuildStatus) error {
 			Where(sq.Lt{"build_id": b.id}).
 			Where(sq.Eq{"b.job_id": b.jobID}).
 			RunWith(tx).
-			Exec()
+			ExecContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -406,12 +407,12 @@ func (b *build) Finish(status BuildStatus) error {
 }
 
 func (b *build) SetDrained(drained bool) error {
-	b.conn.SetSession("build-SetDrained")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-SetDrained")
 	_, err := psql.Update("builds").
 		Set("drained", drained).
 		Where(sq.Eq{"id": b.id}).
 		RunWith(b.conn).
-		Exec()
+		ExecContext(ctx)
 
 	if err == nil {
 		b.drained = drained
@@ -420,13 +421,13 @@ func (b *build) SetDrained(drained bool) error {
 }
 
 func (b *build) Delete() (bool, error) {
-	b.conn.SetSession("build-Delete")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Delete")
 	rows, err := psql.Delete("builds").
 		Where(sq.Eq{
 			"id": b.id,
 		}).
 		RunWith(b.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -450,12 +451,12 @@ func (b *build) Delete() (bool, error) {
 // Setting status as aborted will also make Start() return false in case where
 // build was aborted before it was started.
 func (b *build) MarkAsAborted() error {
-	b.conn.SetSession("build-MarkAsAborted")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-MarkAsAborted")
 	_, err := psql.Update("builds").
 		Set("aborted", true).
 		Where(sq.Eq{"id": b.id}).
 		RunWith(b.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -468,13 +469,13 @@ func (b *build) MarkAsAborted() error {
 // notification to finish the build to ATC that is tracking this build.
 func (b *build) AbortNotifier() (Notifier, error) {
 	return newConditionNotifier(b.conn.Bus(), buildAbortChannel(b.id), func() (bool, error) {
-		b.conn.SetSession("build-AbortNotifier")
+		ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-AbortNotifier")
 		var aborted bool
 		err := psql.Select("aborted = true").
 			From("builds").
 			Where(sq.Eq{"id": b.id}).
 			RunWith(b.conn).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&aborted)
 
 		return aborted, err
@@ -482,12 +483,12 @@ func (b *build) AbortNotifier() (Notifier, error) {
 }
 
 func (b *build) Schedule() (bool, error) {
-	b.conn.SetSession("build-Schedule")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Schedule")
 	result, err := psql.Update("builds").
 		Set("scheduled", true).
 		Where(sq.Eq{"id": b.id}).
 		RunWith(b.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -505,11 +506,11 @@ func (b *build) Pipeline() (Pipeline, bool, error) {
 		return nil, false, nil
 	}
 
-	b.conn.SetSession("build-Pipeline")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Pipeline")
 	row := pipelinesQuery.
 		Where(sq.Eq{"p.id": b.pipelineID}).
 		RunWith(b.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	pipeline := newPipeline(b.conn, b.lockFactory)
 	err := scanPipeline(pipeline, row)
@@ -524,12 +525,12 @@ func (b *build) Pipeline() (Pipeline, bool, error) {
 }
 
 func (b *build) SaveImageResourceVersion(rc UsedResourceCache) error {
-	b.conn.SetSession("build-SaveImageResourceVersion")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-SaveImageResourceVersion")
 	_, err := psql.Insert("build_image_resource_caches").
 		Columns("resource_cache_id", "build_id").
 		Values(rc.ID(), b.id).
 		RunWith(b.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code.Name() == pqUniqueViolationErrCode {
 			return nil
@@ -579,14 +580,14 @@ func (b *build) Preparation() (BuildPreparation, bool, error) {
 		pipelineID         int
 		jobName            string
 	)
-	b.conn.SetSession("build-Preparation")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Preparation")
 	err := psql.Select("p.paused, j.paused, j.max_in_flight_reached, j.pipeline_id, j.name").
 		From("builds b").
 		Join("jobs j ON b.job_id = j.id").
 		Join("pipelines p ON j.pipeline_id = p.id").
 		Where(sq.Eq{"b.id": b.id}).
 		RunWith(b.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&pausedPipeline, &pausedJob, &maxInFlightReached, &pipelineID, &jobName)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -779,7 +780,6 @@ func (b *build) SaveEvent(event atc.Event) error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("build-SaveEvent")
 
 	err = b.saveEvent(tx, event)
 	if err != nil {
@@ -799,7 +799,8 @@ func (b *build) Artifact(artifactID int) (WorkerArtifact, error) {
 		conn: b.conn,
 	}
 
-	b.conn.SetSession("build-Artifact")
+	//ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Artifact")
+	//TODO: shouldn't there be a QueryRow() here?
 	err := psql.Select("id", "name", "created_at").
 		From("worker_artifacts").
 		Where(sq.Eq{
@@ -812,7 +813,7 @@ func (b *build) Artifact(artifactID int) (WorkerArtifact, error) {
 }
 
 func (b *build) Artifacts() ([]WorkerArtifact, error) {
-	b.conn.SetSession("build-Artifacts")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Artifacts")
 	artifacts := []WorkerArtifact{}
 
 	rows, err := psql.Select("id", "name", "created_at").
@@ -821,7 +822,7 @@ func (b *build) Artifacts() ([]WorkerArtifact, error) {
 			"build_id": b.id,
 		}).
 		RunWith(b.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -885,7 +886,6 @@ func (b *build) SaveOutput(
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("build-SaveOutput")
 
 	resourceConfigDescriptor, err := constructResourceConfigDescriptor(resourceType, source, resourceTypes)
 	if err != nil {
@@ -921,12 +921,13 @@ func (b *build) SaveOutput(
 		}
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-SaveOutput")
 	_, err = psql.Insert("build_resource_config_version_outputs").
 		Columns("resource_id", "build_id", "version_md5", "name").
 		Values(resource.ID(), strconv.Itoa(b.id), sq.Expr("md5(?)", versionJSON), outputName).
 		Suffix("ON CONFLICT DO NOTHING").
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 
 	if err != nil {
 		return err
@@ -957,12 +958,12 @@ func (b *build) UseInputs(inputs []BuildInput) error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("build-UseInputs")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-UseInputs")
 
 	_, err = psql.Delete("build_resource_config_version_inputs").
 		Where(sq.Eq{"build_id": b.id}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -985,7 +986,6 @@ func (b *build) UseInputs(inputs []BuildInput) error {
 }
 
 func (b *build) Resources() ([]BuildInput, []BuildOutput, error) {
-	b.conn.SetSession("build-Resources")
 	inputs := []BuildInput{}
 	outputs := []BuildOutput{}
 
@@ -1001,6 +1001,7 @@ func (b *build) Resources() ([]BuildInput, []BuildOutput, error) {
 			AND i.build_id < builds.id
 		)`
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-Resources")
 	rows, err := psql.Select("inputs.name", "resources.id", "versions.version", firstOccurrence).
 		From("resource_config_versions versions, build_resource_config_version_inputs inputs, builds, resources").
 		Where(sq.Eq{"builds.id": b.id}).
@@ -1018,7 +1019,7 @@ func (b *build) Resources() ([]BuildInput, []BuildOutput, error) {
 			AND outputs.build_id = inputs.build_id
 		)`)).
 		RunWith(b.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1061,7 +1062,7 @@ func (b *build) Resources() ([]BuildInput, []BuildOutput, error) {
 		Where(sq.Expr("outputs.resource_id = resources.id")).
 		Where(sq.Expr("resources.resource_config_scope_id = versions.resource_config_scope_id")).
 		RunWith(b.conn).
-		Query()
+		QueryContext(ctx)
 
 	if err != nil {
 		return nil, nil, err
@@ -1096,25 +1097,25 @@ func (b *build) Resources() ([]BuildInput, []BuildOutput, error) {
 }
 
 func (p *build) saveInputTx(tx Tx, buildID int, input BuildInput) error {
-	tx.SetSession("build-saveInputTx")
 	versionJSON, err := json.Marshal(input.Version)
 	if err != nil {
 		return err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-saveInputTx")
 	_, err = psql.Insert("build_resource_config_version_inputs").
 		Columns("build_id", "resource_id", "version_md5", "name").
 		Values(buildID, input.ResourceID, sq.Expr("md5(?)", versionJSON), input.Name).
 		Suffix("ON CONFLICT DO NOTHING").
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
 
 func createBuildEventSeq(tx Tx, buildid int) error {
-	tx.SetSession("build-createBuildEventSeq")
-	_, err := tx.Exec(fmt.Sprintf(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-createBuildEventSeq")
+	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		CREATE SEQUENCE %s MINVALUE 0
 	`, buildEventSeq(buildid)))
 	return err
@@ -1186,7 +1187,6 @@ func scanBuild(b *build, row scannable, encryptionStrategy encryption.Strategy) 
 }
 
 func (b *build) saveEvent(tx Tx, event atc.Event) error {
-	tx.SetSession("build-saveEvent")
 	payload, err := json.Marshal(event)
 	if err != nil {
 		return err
@@ -1196,22 +1196,24 @@ func (b *build) saveEvent(tx Tx, event atc.Event) error {
 	if b.pipelineID != 0 {
 		table = fmt.Sprintf("pipeline_build_events_%d", b.pipelineID)
 	}
+
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-saveEvent")
 	_, err = psql.Insert(table).
 		Columns("event_id", "build_id", "type", "version", "payload").
 		Values(sq.Expr("nextval('"+buildEventSeq(b.id)+"')"), b.id, string(event.EventType()), string(event.Version()), payload).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	return err
 }
 
 func createBuild(tx Tx, build *build, vals map[string]interface{}) error {
-	tx.SetSession("createBuild")
 	var buildID int
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-createBuild")
 	err := psql.Insert("builds").
 		SetMap(vals).
 		Suffix("RETURNING id").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&buildID)
 	if err != nil {
 		return err
@@ -1220,7 +1222,7 @@ func createBuild(tx Tx, build *build, vals map[string]interface{}) error {
 	err = scanBuild(build, buildsQuery.
 		Where(sq.Eq{"b.id": buildID}).
 		RunWith(tx).
-		QueryRow(),
+		QueryRowContext(ctx),
 		build.conn.EncryptionStrategy(),
 	)
 	if err != nil {
@@ -1243,8 +1245,8 @@ func buildAbortChannel(buildID int) string {
 }
 
 func updateNextBuildForJob(tx Tx, jobID int) error {
-	tx.SetSession("updateNextBuildForJob")
-	_, err := tx.Exec(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-updateNextBuildForJob")
+	_, err := tx.ExecContext(ctx, `
 		UPDATE jobs AS j
 		SET next_build_id = (
 			SELECT min(b.id)
@@ -1261,8 +1263,8 @@ func updateNextBuildForJob(tx Tx, jobID int) error {
 }
 
 func updateLatestCompletedBuildForJob(tx Tx, jobID int) error {
-	tx.SetSession("updateLatestCompletedBuildForJob")
-	_, err := tx.Exec(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-updateLatestCompletedBuildForJob")
+	_, err := tx.ExecContext(ctx, `
 		UPDATE jobs AS j
 		SET latest_completed_build_id = (
 			SELECT max(b.id)
@@ -1280,17 +1282,17 @@ func updateLatestCompletedBuildForJob(tx Tx, jobID int) error {
 }
 
 func updateTransitionBuildForJob(tx Tx, jobID int, buildID int, buildStatus BuildStatus) error {
-	tx.SetSession("updateTransitionBuildForJob")
 	var shouldUpdateTransition bool
 
 	var latestID int
 	var latestStatus BuildStatus
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "build-updateTransitionBuildForJob")
 	err := psql.Select("b.id", "b.status").
 		From("builds b").
 		JoinClause("INNER JOIN jobs j ON j.latest_completed_build_id = b.id").
 		Where(sq.Eq{"j.id": jobID}).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&latestID, &latestStatus)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1320,7 +1322,7 @@ func updateTransitionBuildForJob(tx Tx, jobID int, buildID int, buildStatus Buil
 			Set("transition_build_id", buildID).
 			Where(sq.Eq{"id": jobID}).
 			RunWith(tx).
-			Exec()
+			ExecContext(ctx)
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	sq "github.com/Masterminds/squirrel"
 )
 
@@ -21,12 +22,12 @@ func NewArtifactLifecycle(conn Conn) *artifactLifecycle {
 }
 
 func (lifecycle *artifactLifecycle) RemoveExpiredArtifacts() error {
-	lifecycle.conn.SetSession("artifactLifecycle-RemoveExpiredArtifacts")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "artifactLifecycle-RemoveExpiredArtifacts")
 
 	_, err := psql.Delete("worker_artifacts").
 		Where(sq.Expr("created_at < NOW() - interval '12 hours'")).
 		RunWith(lifecycle.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }

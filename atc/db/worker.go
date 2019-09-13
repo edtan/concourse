@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -124,7 +125,7 @@ func (worker *worker) StartTime() time.Time { return worker.startTime }
 func (worker *worker) ExpiresAt() time.Time { return worker.expiresAt }
 
 func (worker *worker) Reload() (bool, error) {
-	ctx := context.WithValue(context.Background(), "queryName", "worker-Reload")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-Reload")
 	row := workersQuery.Where(sq.Eq{"w.name": worker.name}).
 		RunWith(worker.conn).
 		QueryRowContext(ctx)
@@ -149,12 +150,12 @@ func (worker *worker) Land() error {
 		return err
 	}
 
-	worker.conn.SetSession("worker-Land")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-Land")
 	result, err := psql.Update("workers").
 		Set("state", sq.Expr("("+cSQL+")")).
 		Where(sq.Eq{"name": worker.name}).
 		RunWith(worker.conn).
-		Exec()
+		ExecContext(ctx)
 
 	if err != nil {
 		return err
@@ -173,14 +174,14 @@ func (worker *worker) Land() error {
 }
 
 func (worker *worker) Retire() error {
-	worker.conn.SetSession("worker-Retire")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-Retire")
 	result, err := psql.Update("workers").
 		SetMap(map[string]interface{}{
 			"state": string(WorkerStateRetiring),
 		}).
 		Where(sq.Eq{"name": worker.name}).
 		RunWith(worker.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -198,7 +199,7 @@ func (worker *worker) Retire() error {
 }
 
 func (worker *worker) Prune() error {
-	worker.conn.SetSession("worker-Prune")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-Prune")
 	rows, err := sq.Delete("workers").
 		Where(sq.Eq{
 			"name": worker.name,
@@ -208,7 +209,7 @@ func (worker *worker) Prune() error {
 		}).
 		PlaceholderFormat(sq.Dollar).
 		RunWith(worker.conn).
-		Exec()
+		ExecContext(ctx)
 
 	if err != nil {
 		return err
@@ -224,7 +225,7 @@ func (worker *worker) Prune() error {
 		var one int
 		err := psql.Select("1").From("workers").Where(sq.Eq{"name": worker.name}).
 			RunWith(worker.conn).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&one)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -240,14 +241,14 @@ func (worker *worker) Prune() error {
 }
 
 func (worker *worker) Delete() error {
-	worker.conn.SetSession("worker-Delete")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-Delete")
 	_, err := sq.Delete("workers").
 		Where(sq.Eq{
 			"name": worker.name,
 		}).
 		PlaceholderFormat(sq.Dollar).
 		RunWith(worker.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
@@ -299,7 +300,6 @@ func (worker *worker) CreateContainer(owner ContainerOwner, meta ContainerMetada
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("worker-CreateContainer")
 
 	insMap := meta.SQLMap()
 	insMap["worker_name"] = worker.name
@@ -314,11 +314,12 @@ func (worker *worker) CreateContainer(owner ContainerOwner, meta ContainerMetada
 		insMap[k] = v
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-CreateContainer")
 	err = psql.Insert("containers").
 		SetMap(insMap).
 		Suffix("RETURNING id, " + strings.Join(containerMetadataColumns, ", ")).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(cols...)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code.Name() == pqFKeyViolationErrCode {
@@ -343,12 +344,12 @@ func (worker *worker) CreateContainer(owner ContainerOwner, meta ContainerMetada
 }
 
 func (worker *worker) findContainer(whereClause sq.Sqlizer) (CreatingContainer, CreatedContainer, error) {
-	worker.conn.SetSession("worker-findContainer")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-findContainer")
 	creating, created, destroying, _, err := scanContainer(
 		selectContainers().
 			Where(whereClause).
 			RunWith(worker.conn).
-			QueryRow(),
+			QueryRowContext(ctx),
 		worker.conn,
 	)
 	if err != nil {
@@ -366,10 +367,10 @@ func (worker *worker) findContainer(whereClause sq.Sqlizer) (CreatingContainer, 
 }
 
 func (worker *worker) ActiveTasks() (int, error) {
-	worker.conn.SetSession("worker-ActiveTasks")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-ActiveTasks")
 	err := psql.Select("active_tasks").From("workers").Where(sq.Eq{"name": worker.name}).
 		RunWith(worker.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&worker.activeTasks)
 	if err != nil {
 		return 0, err
@@ -378,12 +379,12 @@ func (worker *worker) ActiveTasks() (int, error) {
 }
 
 func (worker *worker) IncreaseActiveTasks() error {
-	worker.conn.SetSession("worker-IncreaseActiveTasks")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-IncreaseActiveTasks")
 	result, err := psql.Update("workers").
 		Set("active_tasks", sq.Expr("active_tasks+1")).
 		Where(sq.Eq{"name": worker.name}).
 		RunWith(worker.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -401,12 +402,12 @@ func (worker *worker) IncreaseActiveTasks() error {
 }
 
 func (worker *worker) DecreaseActiveTasks() error {
-	worker.conn.SetSession("worker-DecreaseActiveTasks")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "worker-DecreaseActiveTasks")
 	result, err := psql.Update("workers").
 		Set("active_tasks", sq.Expr("active_tasks-1")).
 		Where(sq.Eq{"name": worker.name}).
 		RunWith(worker.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}

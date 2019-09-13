@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	sq "github.com/Masterminds/squirrel"
@@ -23,12 +24,12 @@ type UsedWorkerResourceType struct {
 }
 
 func (wrt WorkerResourceType) FindOrCreate(tx Tx, unique bool) (*UsedWorkerResourceType, error) {
-	tx.SetSession("WorkerResourceType-FindOrCreate")
 	usedBaseResourceType, err := wrt.BaseResourceType.FindOrCreate(tx, unique)
 	if err != nil {
 		return nil, err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "WorkerResourceType-FindOrCreate")
 	_, err = psql.Delete("worker_base_resource_types").
 		Where(sq.Eq{
 			"worker_name":           wrt.Worker.Name(),
@@ -43,7 +44,7 @@ func (wrt WorkerResourceType) FindOrCreate(tx Tx, unique bool) (*UsedWorkerResou
 			},
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +62,7 @@ func (wrt WorkerResourceType) FindOrCreate(tx Tx, unique bool) (*UsedWorkerResou
 }
 
 func (wrt WorkerResourceType) find(tx Tx, usedBaseResourceType *UsedBaseResourceType) (*UsedWorkerResourceType, bool, error) {
-	tx.SetSession("WorkerResourceType-find")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "WorkerResourceType-find")
 	var (
 		workerName string
 		id         int
@@ -76,7 +77,7 @@ func (wrt WorkerResourceType) find(tx Tx, usedBaseResourceType *UsedBaseResource
 		}).
 		Suffix("FOR SHARE").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id, &workerName)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -93,7 +94,7 @@ func (wrt WorkerResourceType) find(tx Tx, usedBaseResourceType *UsedBaseResource
 }
 
 func (wrt WorkerResourceType) create(tx Tx, usedBaseResourceType *UsedBaseResourceType) (*UsedWorkerResourceType, error) {
-	tx.SetSession("WorkerResourceType-create")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "WorkerResourceType-create")
 	var id int
 	err := psql.Insert("worker_base_resource_types").
 		Columns(
@@ -115,7 +116,7 @@ func (wrt WorkerResourceType) create(tx Tx, usedBaseResourceType *UsedBaseResour
 			RETURNING id
 		`, wrt.Image, wrt.Version).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 	if err != nil {
 		return nil, err

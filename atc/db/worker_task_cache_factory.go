@@ -28,7 +28,6 @@ func (f *workerTaskCacheFactory) FindOrCreate(workerTaskCache WorkerTaskCache) (
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("WorkerTaskCacheFactory-FindOrCreate")
 
 	usedWorkerTaskCache, err := workerTaskCache.findOrCreate(tx)
 	if err != nil {

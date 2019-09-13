@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -32,7 +33,7 @@ func (u user) Connector() string    { return u.connector }
 func (u user) LastLogin() time.Time { return u.lastLogin }
 
 func (u user) find(tx Tx) (User, bool, error) {
-	tx.SetSession("user-find")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "user-find")
 	var (
 		id        int
 		lastLogin time.Time
@@ -46,7 +47,7 @@ func (u user) find(tx Tx) (User, bool, error) {
 			"sub":       u.sub,
 		}).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id, &lastLogin)
 
 	if err != nil {
@@ -64,7 +65,7 @@ func (u user) find(tx Tx) (User, bool, error) {
 }
 
 func (u user) create(tx Tx) (User, error) {
-	tx.SetSession("user-create")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "user-create")
 	var (
 		id        int
 		lastLogin time.Time
@@ -80,7 +81,7 @@ func (u user) create(tx Tx) (User, error) {
 				last_login = now() 
 			RETURNING id, last_login`, u.name, u.connector, u.sub).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id, &lastLogin)
 	if err != nil {
 		return nil, err
@@ -90,12 +91,12 @@ func (u user) create(tx Tx) (User, error) {
 }
 
 func (u user) delete(tx Tx) error {
-	tx.SetSession("user-delete")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "user-delete")
 	_, err := psql.Delete("users").
 		Where(sq.Eq{
 			"id": u.id,
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	return err
 }

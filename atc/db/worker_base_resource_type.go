@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	sq "github.com/Masterminds/squirrel"
@@ -20,6 +21,7 @@ type UsedWorkerBaseResourceType struct {
 }
 
 func (workerBaseResourceType WorkerBaseResourceType) Find(runner sq.Runner) (*UsedWorkerBaseResourceType, bool, error) {
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerBaseResourceType-Find")
 	var id int
 	var version string
 	err := psql.Select("wbrt.id, wbrt.version").
@@ -31,7 +33,7 @@ func (workerBaseResourceType WorkerBaseResourceType) Find(runner sq.Runner) (*Us
 			"wbrt.worker_name": workerBaseResourceType.WorkerName,
 		}).
 		RunWith(runner).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id, &version)
 	if err != nil {
 		if err == sql.ErrNoRows {

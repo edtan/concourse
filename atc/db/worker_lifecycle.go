@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	sq "github.com/Masterminds/squirrel"
@@ -27,7 +28,7 @@ func NewWorkerLifecycle(conn Conn) WorkerLifecycle {
 }
 
 func (lifecycle *workerLifecycle) DeleteUnresponsiveEphemeralWorkers() ([]string, error) {
-	lifecycle.conn.SetSession("workerLifecycle-DeleteUnresponsiveEphemeralWorkers")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerLifecycle-DeleteUnresponsiveEphemeralWorkers")
 	query, args, err := psql.Delete("workers").
 		Where(sq.Eq{"ephemeral": true}).
 		Where(sq.Expr("expires < NOW()")).
@@ -38,7 +39,7 @@ func (lifecycle *workerLifecycle) DeleteUnresponsiveEphemeralWorkers() ([]string
 		return []string{}, err
 	}
 
-	rows, err := lifecycle.conn.Query(query, args...)
+	rows, err := lifecycle.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +48,7 @@ func (lifecycle *workerLifecycle) DeleteUnresponsiveEphemeralWorkers() ([]string
 }
 
 func (lifecycle *workerLifecycle) StallUnresponsiveWorkers() ([]string, error) {
-	lifecycle.conn.SetSession("workerLifecycle-StallUnresponsiveWorkers")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerLifecycle-StallUnresponsiveWorkers")
 	query, args, err := psql.Update("workers").
 		SetMap(map[string]interface{}{
 			"state":   string(WorkerStateStalled),
@@ -61,7 +62,7 @@ func (lifecycle *workerLifecycle) StallUnresponsiveWorkers() ([]string, error) {
 		return []string{}, err
 	}
 
-	rows, err := lifecycle.conn.Query(query, args...)
+	rows, err := lifecycle.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -116,8 +117,8 @@ func (lifecycle *workerLifecycle) DeleteFinishedRetiringWorkers() ([]string, err
 		return []string{}, err
 	}
 
-	lifecycle.conn.SetSession("workerLifecycle-DeleteFinishedRetiringWorkers")
-	rows, err := lifecycle.conn.Query(query, args...)
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerLifecycle-DeleteFinishedRetiringWorkers")
+	rows, err := lifecycle.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -162,8 +163,8 @@ func (lifecycle *workerLifecycle) LandFinishedLandingWorkers() ([]string, error)
 		return []string{}, err
 	}
 
-	lifecycle.conn.SetSession("workerLifecycle-LandFinishedLandingWorkers")
-	rows, err := lifecycle.conn.Query(query, args...)
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerLifecycle-LandFinishedLandingWorkers")
+	rows, err := lifecycle.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -172,14 +173,14 @@ func (lifecycle *workerLifecycle) LandFinishedLandingWorkers() ([]string, error)
 }
 
 func (lifecycle *workerLifecycle) GetWorkerStateByName() (map[string]WorkerState, error) {
-	lifecycle.conn.SetSession("workerLifecycle-GetWorkerStateByName")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerLifecycle-GetWorkerStateByName")
 	rows, err := psql.Select(`
 		name,
 		state
 	`).
 		From("workers").
 		RunWith(lifecycle.conn).
-		Query()
+		QueryContext(ctx)
 
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -62,7 +63,7 @@ func (container *creatingContainer) WorkerName() string          { return contai
 func (container *creatingContainer) Metadata() ContainerMetadata { return container.metadata }
 
 func (container *creatingContainer) Created() (CreatedContainer, error) {
-	container.conn.SetSession("creatingContainer-Created")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "creatingContainer-Created")
 	rows, err := psql.Update("containers").
 		Set("state", atc.ContainerStateCreated).
 		Where(sq.And{
@@ -73,7 +74,7 @@ func (container *creatingContainer) Created() (CreatedContainer, error) {
 			},
 		}).
 		RunWith(container.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +99,7 @@ func (container *creatingContainer) Created() (CreatedContainer, error) {
 }
 
 func (container *creatingContainer) Failed() (FailedContainer, error) {
-	container.conn.SetSession("creatingContainer-Failed")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "creatingContainer-Failed")
 	rows, err := psql.Update("containers").
 		Set("state", atc.ContainerStateFailed).
 		Where(sq.And{
@@ -109,7 +110,7 @@ func (container *creatingContainer) Failed() (FailedContainer, error) {
 			},
 		}).
 		RunWith(container.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +182,7 @@ func (container *createdContainer) Metadata() ContainerMetadata { return contain
 func (container *createdContainer) IsHijacked() bool { return container.hijacked }
 
 func (container *createdContainer) Destroying() (DestroyingContainer, error) {
-	container.conn.SetSession("createdContainer-Destroying")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdContainer-Destroying")
 	var isDiscontinued bool
 
 	err := psql.Update("containers").
@@ -195,7 +196,7 @@ func (container *createdContainer) Destroying() (DestroyingContainer, error) {
 		}).
 		Suffix("RETURNING discontinued").
 		RunWith(container.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&isDiscontinued)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -216,7 +217,7 @@ func (container *createdContainer) Destroying() (DestroyingContainer, error) {
 }
 
 func (container *createdContainer) Discontinue() (DestroyingContainer, error) {
-	container.conn.SetSession("createdContainer-Discontinue")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdContainer-Discontinue")
 	rows, err := psql.Update("containers").
 		Set("state", atc.ContainerStateDestroying).
 		Set("discontinued", true).
@@ -228,7 +229,7 @@ func (container *createdContainer) Discontinue() (DestroyingContainer, error) {
 			},
 		}).
 		RunWith(container.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +254,7 @@ func (container *createdContainer) Discontinue() (DestroyingContainer, error) {
 }
 
 func (container *createdContainer) MarkAsHijacked() error {
-	container.conn.SetSession("createdContainer-MarkAsHijacked")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "createdContainer-MarkAsHijacked")
 	if container.hijacked {
 		return nil
 	}
@@ -265,7 +266,7 @@ func (container *createdContainer) MarkAsHijacked() error {
 			"state": atc.ContainerStateCreated,
 		}).
 		RunWith(container.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -329,14 +330,14 @@ func (container *destroyingContainer) Metadata() ContainerMetadata { return cont
 func (container *destroyingContainer) IsDiscontinued() bool { return container.isDiscontinued }
 
 func (container *destroyingContainer) Destroy() (bool, error) {
-	container.conn.SetSession("destroyingContainer-Destroy")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "destroyingContainer-Destroy")
 	rows, err := psql.Delete("containers").
 		Where(sq.Eq{
 			"id":    container.id,
 			"state": atc.ContainerStateDestroying,
 		}).
 		RunWith(container.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -392,14 +393,14 @@ func (container *failedContainer) WorkerName() string          { return containe
 func (container *failedContainer) Metadata() ContainerMetadata { return container.metadata }
 
 func (container *failedContainer) Destroy() (bool, error) {
-	container.conn.SetSession("failedContainer-Destroy")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "failedContainer-Destroy")
 	rows, err := psql.Delete("containers").
 		Where(sq.Eq{
 			"id":    container.id,
 			"state": atc.ContainerStateFailed,
 		}).
 		RunWith(container.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -83,10 +84,10 @@ func (f *workerFactory) Workers() ([]Worker, error) {
 }
 
 func getWorker(conn Conn, query sq.SelectBuilder) (Worker, bool, error) {
-	conn.SetSession("workerFactory-getWorker")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerFactory-getWorker")
 	row := query.
 		RunWith(conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	w := &worker{conn: conn}
 
@@ -102,8 +103,8 @@ func getWorker(conn Conn, query sq.SelectBuilder) (Worker, bool, error) {
 }
 
 func getWorkers(conn Conn, query sq.SelectBuilder) ([]Worker, error) {
-	conn.SetSession("workerFactory-getWorkers")
-	rows, err := query.RunWith(conn).Query()
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerFactory-getWorkers")
+	rows, err := query.RunWith(conn).QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +238,7 @@ func (f *workerFactory) HeartbeatWorker(atcWorker atc.Worker, ttl time.Duration)
 		return nil, err
 	}
 	defer Rollback(tx)
-	tx.SetSession("workerFactory-HeartbeatWorker")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerFactory-HeartbeatWorker")
 
 	expires := "NULL"
 	if ttl != 0 {
@@ -262,7 +263,7 @@ func (f *workerFactory) HeartbeatWorker(atcWorker atc.Worker, ttl time.Duration)
 		Set("state", sq.Expr("("+cSQL+")")).
 		Where(sq.Eq{"name": atcWorker.Name}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrWorkerNotPresent
@@ -272,7 +273,7 @@ func (f *workerFactory) HeartbeatWorker(atcWorker atc.Worker, ttl time.Duration)
 
 	row := workersQuery.Where(sq.Eq{"w.name": atcWorker.Name}).
 		RunWith(tx).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	worker := &worker{conn: f.conn}
 	err = scanWorker(worker, row)
@@ -298,7 +299,6 @@ func (f *workerFactory) SaveWorker(atcWorker atc.Worker, ttl time.Duration) (Wor
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("worker_factory-SaveWorker")
 
 	savedWorker, err := saveWorker(tx, atcWorker, nil, ttl, f.conn)
 	if err != nil {
@@ -339,13 +339,13 @@ func (f *workerFactory) FindWorkersForContainerByOwner(owner ContainerOwner) ([]
 }
 
 func (f *workerFactory) BuildContainersCountPerWorker() (map[string]int, error) {
-	f.conn.SetSession("workerFactory-BuildContainersCountPerWorker")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerFactory-BuildContainersCountPerWorker")
 	rows, err := psql.Select("worker_name, COUNT(*)").
 		From("containers").
 		Where("build_id IS NOT NULL").
 		GroupBy("worker_name").
 		RunWith(f.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +370,6 @@ func (f *workerFactory) BuildContainersCountPerWorker() (map[string]int, error) 
 }
 
 func saveWorker(tx Tx, atcWorker atc.Worker, teamID *int, ttl time.Duration, conn Conn) (Worker, error) {
-	tx.SetSession("workerFactory-saveWorker")
 	resourceTypes, err := json.Marshal(atcWorker.ResourceTypes)
 	if err != nil {
 		return nil, err
@@ -428,6 +427,7 @@ func saveWorker(tx Tx, atcWorker atc.Worker, teamID *int, ttl time.Duration, con
 		conflictValues = append(conflictValues, *teamID)
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerFactory-saveWorker")
 	rows, err := psql.Insert("workers").
 		Columns(
 			"expires",
@@ -477,7 +477,7 @@ func saveWorker(tx Tx, atcWorker atc.Worker, teamID *int, ttl time.Duration, con
 			conflictValues...,
 		).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -546,7 +546,7 @@ func saveWorker(tx Tx, atcWorker atc.Worker, teamID *int, ttl time.Duration, con
 			"id": workerBaseResourceTypeIDs,
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}

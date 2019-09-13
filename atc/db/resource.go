@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -182,10 +183,10 @@ func (r *resource) ResourceConfigScopeID() int       { return r.resourceConfigSc
 func (r *resource) Icon() string                     { return r.icon }
 
 func (r *resource) Reload() (bool, error) {
-	r.conn.SetSession("resource-Reload")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-Reload")
 	row := resourcesQuery.Where(sq.Eq{"r.id": r.id}).
 		RunWith(r.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanResource(r, row)
 	if err != nil {
@@ -210,13 +211,13 @@ func (r *resource) SetResourceConfig(source atc.Source, resourceTypes atc.Versio
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("resource-SetResourceConfig")
 
 	resourceConfig, err := resourceConfigDescriptor.findOrCreate(tx, r.lockFactory, r.conn)
 	if err != nil {
 		return nil, err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-SetResourceConfig")
 	_, err = psql.Update("resources").
 		Set("resource_config_id", resourceConfig.ID()).
 		Where(sq.Eq{"id": r.id}).
@@ -225,7 +226,7 @@ func (r *resource) SetResourceConfig(source atc.Source, resourceTypes atc.Versio
 			sq.NotEq{"resource_config_id": resourceConfig.ID()},
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +244,7 @@ func (r *resource) SetResourceConfig(source atc.Source, resourceTypes atc.Versio
 			sq.NotEq{"resource_config_scope_id": resourceConfigScope.ID()},
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -271,18 +272,19 @@ func (r *resource) SetResourceConfig(source atc.Source, resourceTypes atc.Versio
 func (r *resource) SetCheckSetupError(cause error) error {
 	var err error
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-SetCheckSetupError")
 	if cause == nil {
 		_, err = psql.Update("resources").
 			Set("check_error", nil).
 			Where(sq.Eq{"id": r.ID()}).
 			RunWith(r.conn).
-			Exec()
+			ExecContext(ctx)
 	} else {
 		_, err = psql.Update("resources").
 			Set("check_error", cause.Error()).
 			Where(sq.Eq{"id": r.ID()}).
 			RunWith(r.conn).
-			Exec()
+			ExecContext(ctx)
 	}
 
 	return err
@@ -296,7 +298,6 @@ func (r *resource) SaveUncheckedVersion(version atc.Version, metadata ResourceCo
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("resource-SaveUncheckedVersion")
 
 	resourceConfigScope, err := findOrCreateResourceConfigScope(tx, r.conn, r.lockFactory, resourceConfig, r, resourceTypes)
 	if err != nil {
@@ -322,7 +323,7 @@ func (r *resource) UpdateMetadata(version atc.Version, metadata ResourceConfigMe
 		return false, err
 	}
 
-	r.conn.SetSession("resource-UpdateMetadata")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-UpdateMetadata")
 	_, err = psql.Update("resource_config_versions").
 		Set("metadata", string(metadataJSON)).
 		Where(sq.Eq{
@@ -332,7 +333,7 @@ func (r *resource) UpdateMetadata(version atc.Version, metadata ResourceConfigMe
 			"version_md5 = md5(?)", versionJSON,
 		)).
 		RunWith(r.conn).
-		Exec()
+		ExecContext(ctx)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -349,7 +350,7 @@ func (r *resource) ResourceConfigVersionID(version atc.Version) (int, bool, erro
 		return 0, false, err
 	}
 
-	r.conn.SetSession("resource-ResourceConfigVersionID")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-ResourceConfigVersionID")
 	var id int
 	err = psql.Select("rcv.id").
 		From("resource_config_versions rcv").
@@ -357,7 +358,7 @@ func (r *resource) ResourceConfigVersionID(version atc.Version) (int, bool, erro
 		Where(sq.Eq{"r.id": r.ID(), "version": requestedVersion}).
 		Where(sq.NotEq{"rcv.check_order": 0}).
 		RunWith(r.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -370,12 +371,12 @@ func (r *resource) ResourceConfigVersionID(version atc.Version) (int, bool, erro
 }
 
 func (r *resource) SetPinComment(comment string) error {
-	r.conn.SetSession("resource-SetPinComment")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-SetPinComment")
 	_, err := psql.Update("resource_pins").
 		Set("comment_text", comment).
 		Where(sq.Eq{"resource_id": r.ID()}).
 		RunWith(r.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
@@ -390,7 +391,6 @@ func (r *resource) CurrentPinnedVersion() atc.Version {
 }
 
 func (r *resource) Versions(page Page, versionFilter atc.Version) ([]atc.ResourceVersion, Pagination, bool, error) {
-	r.conn.SetSession("resource-Versions")
 	query := `
 		SELECT v.id, v.version, v.metadata, v.check_order,
 			NOT EXISTS (
@@ -414,10 +414,11 @@ func (r *resource) Versions(page Page, versionFilter atc.Version) ([]atc.Resourc
 		filterJSON = string(filterBytes)
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-Versions")
 	var rows *sql.Rows
 	var err error
 	if page.Until != 0 {
-		rows, err = r.conn.Query(fmt.Sprintf(`
+		rows, err = r.conn.QueryContext(ctx, fmt.Sprintf(`
 			SELECT sub.*
 				FROM (
 						%s
@@ -432,7 +433,7 @@ func (r *resource) Versions(page Page, versionFilter atc.Version) ([]atc.Resourc
 			return nil, Pagination{}, false, err
 		}
 	} else if page.Since != 0 {
-		rows, err = r.conn.Query(fmt.Sprintf(`
+		rows, err = r.conn.QueryContext(ctx, fmt.Sprintf(`
 			%s
 				AND version @> $4
 				AND v.check_order < (SELECT check_order FROM resource_config_versions WHERE id = $2)
@@ -443,7 +444,7 @@ func (r *resource) Versions(page Page, versionFilter atc.Version) ([]atc.Resourc
 			return nil, Pagination{}, false, err
 		}
 	} else if page.To != 0 {
-		rows, err = r.conn.Query(fmt.Sprintf(`
+		rows, err = r.conn.QueryContext(ctx, fmt.Sprintf(`
 			SELECT sub.*
 				FROM (
 						%s
@@ -458,7 +459,7 @@ func (r *resource) Versions(page Page, versionFilter atc.Version) ([]atc.Resourc
 			return nil, Pagination{}, false, err
 		}
 	} else if page.From != 0 {
-		rows, err = r.conn.Query(fmt.Sprintf(`
+		rows, err = r.conn.QueryContext(ctx, fmt.Sprintf(`
 			%s
 				AND version @> $4
 				AND v.check_order <= (SELECT check_order FROM resource_config_versions WHERE id = $2)
@@ -469,7 +470,7 @@ func (r *resource) Versions(page Page, versionFilter atc.Version) ([]atc.Resourc
 			return nil, Pagination{}, false, err
 		}
 	} else {
-		rows, err = r.conn.Query(fmt.Sprintf(`
+		rows, err = r.conn.QueryContext(ctx, fmt.Sprintf(`
 			%s
 			AND version @> $3
 			ORDER BY v.check_order DESC
@@ -530,7 +531,7 @@ func (r *resource) Versions(page Page, versionFilter atc.Version) ([]atc.Resourc
 	var minCheckOrder int
 	var maxCheckOrder int
 
-	err = r.conn.QueryRow(`
+	err = r.conn.QueryRowContext(ctx, `
 		SELECT COALESCE(MAX(v.check_order), 0) as maxCheckOrder,
 			COALESCE(MIN(v.check_order), 0) as minCheckOrder
 		FROM resource_config_versions v, resources r
@@ -571,8 +572,8 @@ func (r *resource) DisableVersion(rcvID int) error {
 }
 
 func (r *resource) PinVersion(rcvID int) error {
-	r.conn.SetSession("resource-PinVersion")
-	results, err := r.conn.Exec(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-PinVersion")
+	results, err := r.conn.ExecContext(ctx, `
 	    INSERT INTO resource_pins(resource_id, version, comment_text)
 			VALUES ($1,
 				( SELECT rcv.version
@@ -596,11 +597,11 @@ func (r *resource) PinVersion(rcvID int) error {
 }
 
 func (r *resource) UnpinVersion() error {
-	r.conn.SetSession("resource-UnpinVersion")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-UnpinVersion")
 	results, err := psql.Delete("resource_pins").
 		Where(sq.Eq{"resource_pins.resource_id": r.id}).
 		RunWith(r.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -624,17 +625,17 @@ func (r *resource) toggleVersion(rcvID int, enable bool) error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("resource-toggleVersion")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resource-toggleVersion")
 
 	var results sql.Result
 	if enable {
-		results, err = tx.Exec(`
+		results, err = tx.ExecContext(ctx, `
 			DELETE FROM resource_disabled_versions
 			WHERE resource_id = $1
 			AND version_md5 = (SELECT version_md5 FROM resource_config_versions rcv WHERE rcv.id = $2)
 			`, r.id, rcvID)
 	} else {
-		results, err = tx.Exec(`
+		results, err = tx.ExecContext(ctx, `
 			INSERT INTO resource_disabled_versions (resource_id, version_md5)
 			SELECT $1, rcv.version_md5
 			FROM resource_config_versions rcv

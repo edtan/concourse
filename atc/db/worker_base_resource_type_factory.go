@@ -24,7 +24,6 @@ func (f *workerBaseResourceTypeFactory) Find(name string, worker Worker) (*UsedW
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("WorkerBaseResourceTypeFactory-Find")
 
 	return WorkerBaseResourceType{
 		Name:       name,

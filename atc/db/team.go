@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -84,26 +85,26 @@ func (t *team) Admin() bool  { return t.admin }
 func (t *team) Auth() atc.TeamAuth { return t.auth }
 
 func (t *team) Delete() error {
-	t.conn.SetSession("team-Delete")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-Delete")
 	_, err := psql.Delete("teams").
 		Where(sq.Eq{
 			"name": t.name,
 		}).
 		RunWith(t.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
 
 func (t *team) Rename(name string) error {
-	t.conn.SetSession("team-Rename")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-Rename")
 	_, err := psql.Update("teams").
 		Set("name", name).
 		Where(sq.Eq{
 			"id": t.id,
 		}).
 		RunWith(t.conn).
-		Exec()
+		ExecContext(ctx)
 
 	return err
 }
@@ -122,7 +123,6 @@ func (t *team) FindVolumeForWorkerArtifact(artifactID int) (CreatedVolume, bool,
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("team-FindVolumeForWorkerArtifact")
 
 	artifact, found, err := getWorkerArtifact(tx, t.conn, artifactID)
 	if err != nil {
@@ -154,7 +154,7 @@ func (t *team) FindWorkerForVolume(handle string) (Worker, bool, error) {
 }
 
 func (t *team) Containers() ([]Container, error) {
-	t.conn.SetSession("team-Containers")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-Containers")
 	rows, err := selectContainers("c").
 		Join("workers w ON c.worker_name = w.name").
 		Join("resource_config_check_sessions rccs ON rccs.id = c.resource_config_check_session_id").
@@ -172,7 +172,7 @@ func (t *team) Containers() ([]Container, error) {
 		}).
 		Distinct().
 		RunWith(t.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (t *team) Containers() ([]Container, error) {
 		}).
 		Distinct().
 		RunWith(t.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (t *team) Containers() ([]Container, error) {
 			"c.team_id": t.id,
 		}).
 		RunWith(t.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (t *team) Containers() ([]Container, error) {
 }
 
 func (t *team) IsCheckContainer(handle string) (bool, error) {
-	t.conn.SetSession("team-IsCheckContainer")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-IsCheckContainer")
 	var containerType string
 	err := psql.Select("meta_type").
 		From("containers").
@@ -237,7 +237,7 @@ func (t *team) IsCheckContainer(handle string) (bool, error) {
 			"handle": handle,
 		}).
 		RunWith(t.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&containerType)
 	if err != nil {
 		return false, err
@@ -247,7 +247,7 @@ func (t *team) IsCheckContainer(handle string) (bool, error) {
 }
 
 func (t *team) IsContainerWithinTeam(handle string, isCheck bool) (bool, error) {
-	t.conn.SetSession("team-IsContainerWithinTeam")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-IsContainerWithinTeam")
 	var ok int
 	var err error
 
@@ -263,7 +263,7 @@ func (t *team) IsContainerWithinTeam(handle string, isCheck bool) (bool, error) 
 				"p.team_id": t.id,
 			}).
 			RunWith(t.conn).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&ok)
 	} else {
 		err = psql.Select("1").
@@ -273,7 +273,7 @@ func (t *team) IsContainerWithinTeam(handle string, isCheck bool) (bool, error) 
 				"c.handle":  handle,
 			}).
 			RunWith(t.conn).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&ok)
 	}
 	if err != nil {
@@ -309,11 +309,11 @@ func (t *team) FindContainersByMetadata(metadata ContainerMetadata) ([]Container
 	eq := sq.Eq(metadata.SQLMap())
 	eq["team_id"] = t.id
 
-	t.conn.SetSession("team-FindContainersByMetadata")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-FindContainersByMetadata")
 	rows, err := selectContainers().
 		Where(eq).
 		RunWith(t.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -370,9 +370,9 @@ func (t *team) SavePipeline(
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("team-SavePipeline")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-SavePipeline")
 
-	err = tx.QueryRow(`
+	err = tx.QueryRowContext(ctx, `
 		SELECT COUNT(1)
 		FROM pipelines
 		WHERE name = $1
@@ -395,7 +395,7 @@ func (t *team) SavePipeline(
 			}).
 			Suffix("RETURNING id").
 			RunWith(tx).
-			QueryRow().Scan(&pipelineID)
+			QueryRowContext(ctx).Scan(&pipelineID)
 		if err != nil {
 			return nil, false, err
 		}
@@ -412,7 +412,7 @@ func (t *team) SavePipeline(
 			}).
 			Suffix("RETURNING id")
 
-		err = update.RunWith(tx).QueryRow().Scan(&pipelineID)
+		err = update.RunWith(tx).QueryRowContext(ctx).Scan(&pipelineID)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				return nil, false, ErrConfigComparisonFailed
@@ -421,7 +421,7 @@ func (t *team) SavePipeline(
 			return nil, false, err
 		}
 
-		_, err = tx.Exec(`
+		_, err = tx.ExecContext(ctx, `
       DELETE FROM jobs_serial_groups
       WHERE job_id in (
         SELECT j.id
@@ -433,7 +433,7 @@ func (t *team) SavePipeline(
 			return nil, false, err
 		}
 
-		_, err = tx.Exec(`
+		_, err = tx.ExecContext(ctx, `
 			UPDATE jobs
 			SET active = false
 			WHERE pipeline_id = $1
@@ -442,7 +442,7 @@ func (t *team) SavePipeline(
 			return nil, false, err
 		}
 
-		_, err = tx.Exec(`
+		_, err = tx.ExecContext(ctx, `
 			UPDATE resources
 			SET active = false
 			WHERE pipeline_id = $1
@@ -451,7 +451,7 @@ func (t *team) SavePipeline(
 			return nil, false, err
 		}
 
-		_, err = tx.Exec(`
+		_, err = tx.ExecContext(ctx, `
 			UPDATE resource_types
 			SET active = false
 			WHERE pipeline_id = $1
@@ -468,7 +468,7 @@ func (t *team) SavePipeline(
 		}
 	}
 
-	_, err = tx.Exec(`
+	_, err = tx.ExecContext(ctx, `
 			UPDATE resources
 			SET resource_config_id = NULL
 			WHERE pipeline_id = $1
@@ -516,7 +516,7 @@ func (t *team) SavePipeline(
 		pipelinesQuery.
 			Where(sq.Eq{"p.id": pipelineID}).
 			RunWith(tx).
-			QueryRow(),
+			QueryRowContext(ctx),
 	)
 	if err != nil {
 		return nil, false, err
@@ -533,6 +533,7 @@ func (t *team) SavePipeline(
 func (t *team) Pipeline(pipelineName string) (Pipeline, bool, error) {
 	pipeline := newPipeline(t.conn, t.lockFactory)
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-Pipeline")
 	err := scanPipeline(
 		pipeline,
 		pipelinesQuery.
@@ -541,7 +542,7 @@ func (t *team) Pipeline(pipelineName string) (Pipeline, bool, error) {
 				"p.name":    pipelineName,
 			}).
 			RunWith(t.conn).
-			QueryRow(),
+			QueryRowContext(ctx),
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -554,14 +555,14 @@ func (t *team) Pipeline(pipelineName string) (Pipeline, bool, error) {
 }
 
 func (t *team) Pipelines() ([]Pipeline, error) {
-	t.conn.SetSession("team-Pipelines")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-Pipelines")
 	rows, err := pipelinesQuery.
 		Where(sq.Eq{
 			"team_id": t.id,
 		}).
 		OrderBy("ordering").
 		RunWith(t.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -575,7 +576,7 @@ func (t *team) Pipelines() ([]Pipeline, error) {
 }
 
 func (t *team) PublicPipelines() ([]Pipeline, error) {
-	t.conn.SetSession("team-PublicPipelines")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-PublicPipelines")
 	rows, err := pipelinesQuery.
 		Where(sq.Eq{
 			"team_id": t.id,
@@ -583,7 +584,7 @@ func (t *team) PublicPipelines() ([]Pipeline, error) {
 		}).
 		OrderBy("team_id ASC", "ordering ASC").
 		RunWith(t.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +604,7 @@ func (t *team) OrderPipelines(pipelineNames []string) error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("team-OrderPipelines")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-OrderPipelines")
 
 	for i, name := range pipelineNames {
 		pipelineUpdate, err := psql.Update("pipelines").
@@ -613,7 +614,7 @@ func (t *team) OrderPipelines(pipelineNames []string) error {
 				"team_id": t.id,
 			}).
 			RunWith(tx).
-			Exec()
+			ExecContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -636,7 +637,6 @@ func (t *team) CreateOneOffBuild() (Build, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("team-CreateOneOffBuild")
 
 	build := &build{conn: t.conn, lockFactory: t.lockFactory}
 	err = createBuild(tx, build, map[string]interface{}{
@@ -663,7 +663,6 @@ func (t *team) CreateStartedBuild(plan atc.Plan) (Build, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("team-CreateStartedBuild")
 
 	metadata, err := json.Marshal(plan)
 	if err != nil {
@@ -736,7 +735,6 @@ func (t *team) SaveWorker(atcWorker atc.Worker, ttl time.Duration) (Worker, erro
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("team-SaveWorker")
 
 	savedWorker, err := saveWorker(tx, atcWorker, &t.id, ttl, t.conn)
 	if err != nil {
@@ -757,7 +755,6 @@ func (t *team) UpdateProviderAuth(auth atc.TeamAuth) error {
 		return err
 	}
 	defer Rollback(tx)
-	tx.SetSession("team-UpdateProviderAuth")
 
 	jsonEncodedProviderAuth, err := json.Marshal(auth)
 	if err != nil {
@@ -824,7 +821,7 @@ func (t *team) FindCheckContainers(pipelineName string, resourceName string, sec
 		return nil, nil, err
 	}
 
-	t.conn.SetSession("team-FindCheckContainers")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-FindCheckContainers")
 	rows, err := selectContainers("c").
 		Join("resource_config_check_sessions rccs ON rccs.id = c.resource_config_check_session_id").
 		Where(sq.Eq{
@@ -832,7 +829,7 @@ func (t *team) FindCheckContainers(pipelineName string, resourceName string, sec
 		}).
 		Distinct().
 		RunWith(t.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -852,7 +849,7 @@ func (t *team) FindCheckContainers(pipelineName string, resourceName string, sec
 		}).
 		Distinct().
 		RunWith(t.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -883,7 +880,7 @@ type UpdateName struct {
 }
 
 func (t *team) updateName(tx Tx, jobs []atc.JobConfig, pipelineID int) error {
-	tx.SetSession("team-updateName")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-updateName")
 	jobsToUpdate := []UpdateName{}
 
 	for _, job := range jobs {
@@ -895,7 +892,7 @@ func (t *team) updateName(tx Tx, jobs []atc.JobConfig, pipelineID int) error {
 					"name":        job.OldName,
 					"pipeline_id": pipelineID}).
 				RunWith(tx).
-				QueryRow().
+				QueryRowContext(ctx).
 				Scan(&count)
 			if err != nil {
 				return err
@@ -927,7 +924,7 @@ func (t *team) updateName(tx Tx, jobs []atc.JobConfig, pipelineID int) error {
 				"pipeline_id": pipelineID,
 				"active":      false}).
 			RunWith(tx).
-			Exec()
+			ExecContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -936,7 +933,7 @@ func (t *team) updateName(tx Tx, jobs []atc.JobConfig, pipelineID int) error {
 			Set("name", updateName.NewName).
 			Where(sq.Eq{"name": updateName.OldName, "pipeline_id": pipelineID}).
 			RunWith(tx).
-			Exec()
+			ExecContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -978,7 +975,6 @@ func sortUpdateNames(jobNames []UpdateName) []UpdateName {
 }
 
 func (t *team) saveJob(tx Tx, job atc.JobConfig, pipelineID int, groups []string) error {
-	tx.SetSession("team-saveJob")
 	configPayload, err := json.Marshal(job)
 	if err != nil {
 		return err
@@ -1003,7 +999,8 @@ func (t *team) saveJob(tx Tx, job atc.JobConfig, pipelineID int, groups []string
 		return nil
 	}
 
-	_, err = tx.Exec(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-saveJob")
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO jobs (name, pipeline_id, config, interruptible, active, nonce, tags)
 		VALUES ($1, $2, $3, $4, true, $5, $6)
 	`, job.Name, pipelineID, encryptedPayload, job.Interruptible, nonce, pq.Array(groups))
@@ -1012,8 +1009,8 @@ func (t *team) saveJob(tx Tx, job atc.JobConfig, pipelineID int, groups []string
 }
 
 func (t *team) registerSerialGroup(tx Tx, jobName, serialGroup string, pipelineID int) error {
-	tx.SetSession("team-registerSerialGroup")
-	_, err := tx.Exec(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-registerSerialGroup")
+	_, err := tx.ExecContext(ctx, `
     INSERT INTO jobs_serial_groups (serial_group, job_id) VALUES
     ($1, (SELECT j.id
                   FROM jobs j
@@ -1029,7 +1026,6 @@ func (t *team) registerSerialGroup(tx Tx, jobName, serialGroup string, pipelineI
 }
 
 func (t *team) saveResource(tx Tx, resource atc.ResourceConfig, pipelineID int) error {
-	tx.SetSession("team-saveResource")
 	configPayload, err := json.Marshal(resource)
 	if err != nil {
 		return err
@@ -1050,6 +1046,7 @@ func (t *team) saveResource(tx Tx, resource atc.ResourceConfig, pipelineID int) 
 		return err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-saveResource")
 	if resource.Version != nil {
 		resourceIDQuery := `
 				resource_pins.resource_id =
@@ -1058,7 +1055,7 @@ func (t *team) saveResource(tx Tx, resource atc.ResourceConfig, pipelineID int) 
 		_, err = psql.Delete("resource_pins").
 			Where(resourceIDQuery, resource.Name, pipelineID).
 			RunWith(tx).
-			Exec()
+			ExecContext(ctx)
 
 		if err != nil {
 			return err
@@ -1069,7 +1066,7 @@ func (t *team) saveResource(tx Tx, resource atc.ResourceConfig, pipelineID int) 
 		return nil
 	}
 
-	_, err = tx.Exec(`
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO resources (name, pipeline_id, config, active, nonce, type)
 		VALUES ($1, $2, $3, true, $4, $5)
 	`, resource.Name, pipelineID, encryptedPayload, nonce, resource.Type)
@@ -1078,7 +1075,6 @@ func (t *team) saveResource(tx Tx, resource atc.ResourceConfig, pipelineID int) 
 }
 
 func (t *team) saveResourceType(tx Tx, resourceType atc.ResourceType, pipelineID int) error {
-	tx.SetSession("team-saveResourceType")
 	configPayload, err := json.Marshal(resourceType)
 	if err != nil {
 		return err
@@ -1103,7 +1099,8 @@ func (t *team) saveResourceType(tx Tx, resourceType atc.ResourceType, pipelineID
 		return nil
 	}
 
-	_, err = tx.Exec(`
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-saveResourceType")
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO resource_types (name, type, pipeline_id, config, active, nonce)
 		VALUES ($1, $2, $3, $4, true, $5)
 	`, resourceType.Name, resourceType.Type, pipelineID, encryptedPayload, nonce)
@@ -1112,8 +1109,8 @@ func (t *team) saveResourceType(tx Tx, resourceType atc.ResourceType, pipelineID
 }
 
 func checkIfRowsUpdated(tx Tx, query string, params ...interface{}) (bool, error) {
-	tx.SetSession("checkIfRowsUpdated")
-	result, err := tx.Exec(query, params...)
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-checkIfRowsUpdated")
+	result, err := tx.ExecContext(ctx, query, params...)
 	if err != nil {
 		return false, err
 	}
@@ -1145,12 +1142,12 @@ func swallowUniqueViolation(err error) error {
 }
 
 func (t *team) findContainer(whereClause sq.Sqlizer) (CreatingContainer, CreatedContainer, error) {
-	t.conn.SetSession("team-findContainer")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-findContainer")
 	creating, created, destroying, _, err := scanContainer(
 		selectContainers().
 			Where(whereClause).
 			RunWith(t.conn).
-			QueryRow(),
+			QueryRowContext(ctx),
 		t.conn,
 	)
 	if err != nil {
@@ -1234,10 +1231,10 @@ func scanContainers(rows *sql.Rows, conn Conn, initContainers []Container) ([]Co
 }
 
 func (t *team) queryTeam(tx Tx, query string, params ...interface{}) error {
-	tx.SetSession("team-queryTeam")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "team-queryTeam")
 	var providerAuth, nonce sql.NullString
 
-	err := tx.QueryRow(query, params...).Scan(
+	err := tx.QueryRowContext(ctx, query, params...).Scan(
 		&t.id,
 		&t.name,
 		&t.admin,

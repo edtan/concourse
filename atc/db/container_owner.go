@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -148,7 +149,7 @@ type ContainerOwnerExpiries struct {
 }
 
 func (c resourceConfigCheckSessionContainerOwner) Find(conn Conn) (sq.Eq, bool, error) {
-	conn.SetSession("resourceConfigCheckSessionContainerOwner-Find")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigCheckSessionContainerOwner-Find")
 	var ids []int
 	rows, err := psql.Select("id").
 		From("resource_config_check_sessions").
@@ -157,7 +158,7 @@ func (c resourceConfigCheckSessionContainerOwner) Find(conn Conn) (sq.Eq, bool, 
 			sq.Expr("expires_at > NOW()"),
 		}).
 		RunWith(conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -182,7 +183,7 @@ func (c resourceConfigCheckSessionContainerOwner) Find(conn Conn) (sq.Eq, bool, 
 }
 
 func (c resourceConfigCheckSessionContainerOwner) Create(tx Tx, workerName string) (map[string]interface{}, error) {
-	tx.SetSession("resourceConfigCheckSessionContainerOwner-Create")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigCheckSessionContainerOwner-Create")
 	var wbrtID int
 	err := psql.Select("id").
 		From("worker_base_resource_types").
@@ -192,7 +193,7 @@ func (c resourceConfigCheckSessionContainerOwner) Create(tx Tx, workerName strin
 		}).
 		Suffix("FOR SHARE").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&wbrtID)
 	if err != nil {
 		return nil, err
@@ -218,7 +219,7 @@ func (c resourceConfigCheckSessionContainerOwner) Create(tx Tx, workerName strin
 			RETURNING id
 		`, c.resourceConfigID, wbrtID).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&rccsID)
 	if err != nil {
 		return nil, err

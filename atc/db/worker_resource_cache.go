@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -32,7 +33,6 @@ func (workerResourceCache WorkerResourceCache) FindOrCreate(tx Tx) (*UsedWorkerR
 		return nil, ErrWorkerBaseResourceTypeDisappeared
 	}
 
-	tx.SetSession("workerResourceCache-find")
 	id, found, err := workerResourceCache.find(tx, usedWorkerBaseResourceType)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (workerResourceCache WorkerResourceCache) FindOrCreate(tx Tx) (*UsedWorkerR
 		}, nil
 	}
 
-	tx.SetSession("workerResourceCache-FindOrCreate")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerResourceCache-FindOrCreate")
 	err = psql.Insert("worker_resource_caches").
 		Columns(
 			"resource_cache_id",
@@ -61,7 +61,7 @@ func (workerResourceCache WorkerResourceCache) FindOrCreate(tx Tx) (*UsedWorkerR
 			RETURNING id
 		`, workerResourceCache.ResourceCache.ID(), usedWorkerBaseResourceType.ID).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 	if err != nil {
 		return nil, err
@@ -101,6 +101,7 @@ func (workerResourceCache WorkerResourceCache) Find(runner sq.Runner) (*UsedWork
 }
 
 func (workerResourceCache WorkerResourceCache) find(runner sq.Runner, usedWorkerBaseResourceType *UsedWorkerBaseResourceType) (int, bool, error) {
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "workerResourceCache-find")
 	var id int
 
 	err := psql.Select("id").
@@ -111,7 +112,7 @@ func (workerResourceCache WorkerResourceCache) find(runner sq.Runner, usedWorker
 		}).
 		Suffix("FOR SHARE").
 		RunWith(runner).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {

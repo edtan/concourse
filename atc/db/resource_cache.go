@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
@@ -28,7 +29,6 @@ type ResourceCacheDescriptor struct {
 }
 
 func (cache *ResourceCacheDescriptor) find(tx Tx, lockFactory lock.LockFactory, conn Conn) (UsedResourceCache, bool, error) {
-	tx.SetSession("ResourceCacheDescriptor-find")
 	resourceConfig, found, err := cache.ResourceConfigDescriptor.find(tx, lockFactory, conn)
 	if err != nil {
 		return nil, false, err
@@ -46,7 +46,6 @@ func (cache *ResourceCacheDescriptor) findOrCreate(
 	lockFactory lock.LockFactory,
 	conn Conn,
 ) (UsedResourceCache, error) {
-	tx.SetSession("ResourceCacheDescriptor-findOrCreate")
 	resourceConfig, err := cache.ResourceConfigDescriptor.findOrCreate(tx, lockFactory, conn)
 	if err != nil {
 		return nil, err
@@ -59,6 +58,7 @@ func (cache *ResourceCacheDescriptor) findOrCreate(
 
 	if !found {
 		var id int
+		ctx := context.WithValue(context.Background(), ctxQueryNameKey, "ResourceCacheDescriptor-findOrCreate")
 		err = psql.Insert("resource_caches").
 			Columns(
 				"resource_config_id",
@@ -78,7 +78,7 @@ func (cache *ResourceCacheDescriptor) findOrCreate(
 				RETURNING id
 			`, resourceConfig.ID(), cache.version(), paramsHash(cache.Params)).
 			RunWith(tx).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&id)
 		if err != nil {
 			return nil, err
@@ -101,16 +101,16 @@ func (cache *ResourceCacheDescriptor) use(
 	rc UsedResourceCache,
 	user ResourceCacheUser,
 ) error {
-	tx.SetSession("ResourceCacheDescriptor-use")
 	cols := user.SQLMap()
 	cols["resource_cache_id"] = rc.ID()
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "ResourceCacheDescriptor-use")
 	var resourceCacheUseExists int
 	err := psql.Select("1").
 		From("resource_cache_uses").
 		Where(sq.Eq(cols)).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&resourceCacheUseExists)
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -126,12 +126,12 @@ func (cache *ResourceCacheDescriptor) use(
 	_, err = psql.Insert("resource_cache_uses").
 		SetMap(cols).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	return err
 }
 
 func (cache *ResourceCacheDescriptor) findWithResourceConfig(tx Tx, resourceConfig ResourceConfig, lockFactory lock.LockFactory, conn Conn) (UsedResourceCache, bool, error) {
-	tx.SetSession("ResourceCacheDescriptor-findWithResourceConfig")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "ResourceCacheDescriptor-findWithResourceConfig")
 	var id int
 	err := psql.Select("id").
 		From("resource_caches").
@@ -142,7 +142,7 @@ func (cache *ResourceCacheDescriptor) findWithResourceConfig(tx Tx, resourceConf
 		}).
 		Suffix("FOR SHARE").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -212,13 +212,13 @@ func (cache *usedResourceCache) ResourceConfig() ResourceConfig { return cache.r
 func (cache *usedResourceCache) Version() atc.Version           { return cache.version }
 
 func (cache *usedResourceCache) Destroy(tx Tx) (bool, error) {
-	tx.SetSession("usedResourceCache-Destroy")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "usedResourceCache-Destroy")
 	rows, err := psql.Delete("resource_caches").
 		Where(sq.Eq{
 			"id": cache.id,
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}

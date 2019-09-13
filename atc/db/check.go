@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -121,10 +122,10 @@ func (c *check) BaseResourceTypeID() int {
 }
 
 func (c *check) Reload() (bool, error) {
-	c.conn.SetSession("check-Reload")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "check-Reload")
 	row := checksQuery.Where(sq.Eq{"c.id": c.id}).
 		RunWith(c.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanCheck(c, row)
 	if err != nil {
@@ -144,7 +145,7 @@ func (c *check) Start() error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("check-Start")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "check-Start")
 
 	_, err = psql.Update("checks").
 		Set("start_time", sq.Expr("now()")).
@@ -152,7 +153,7 @@ func (c *check) Start() error {
 			"id": c.id,
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -163,7 +164,7 @@ func (c *check) Start() error {
 			"id": c.resourceConfigScopeID,
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -191,7 +192,7 @@ func (c *check) finish(status CheckStatus, checkError error) error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("check-finish")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "check-finish")
 
 	builder := psql.Update("checks").
 		Set("status", status).
@@ -206,7 +207,7 @@ func (c *check) finish(status CheckStatus, checkError error) error {
 
 	_, err = builder.
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -225,7 +226,7 @@ func (c *check) finish(status CheckStatus, checkError error) error {
 
 	_, err = builder.
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -246,7 +247,7 @@ func (c *check) AcquireTrackingLock(logger lager.Logger) (lock.Lock, bool, error
 }
 
 func (c *check) AllCheckables() ([]Checkable, error) {
-	c.conn.SetSession("check-AllCheckables")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "check-AllCheckables")
 	var checkables []Checkable
 
 	rows, err := resourcesQuery.
@@ -254,7 +255,7 @@ func (c *check) AllCheckables() ([]Checkable, error) {
 			"r.resource_config_scope_id": c.resourceConfigScopeID,
 		}).
 		RunWith(c.conn).
-		Query()
+		QueryContext(ctx)
 
 	if err != nil {
 		return nil, err
@@ -281,7 +282,7 @@ func (c *check) AllCheckables() ([]Checkable, error) {
 			"ro.id": c.resourceConfigScopeID,
 		}).
 		RunWith(c.conn).
-		Query()
+		QueryContext(ctx)
 
 	if err != nil {
 		return nil, err

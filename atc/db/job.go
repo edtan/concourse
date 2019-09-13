@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -90,12 +91,12 @@ type job struct {
 }
 
 func (j *job) SetHasNewInputs(hasNewInputs bool) error {
-	j.conn.SetSession("job-SetHasNewInputs")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-SetHasNewInputs")
 	result, err := psql.Update("jobs").
 		Set("has_new_inputs", hasNewInputs).
 		Where(sq.Eq{"id": j.id}).
 		RunWith(j.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -138,10 +139,10 @@ func (j *job) Public() bool            { return j.Config().Public }
 func (j *job) HasNewInputs() bool      { return j.hasNewInputs }
 
 func (j *job) Reload() (bool, error) {
-	j.conn.SetSession("job-Reload")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-Reload")
 	row := jobsQuery.Where(sq.Eq{"j.id": j.id}).
 		RunWith(j.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanJob(j, row)
 	if err != nil {
@@ -195,12 +196,12 @@ func (j *job) UpdateFirstLoggedBuildID(newFirstLoggedBuildID int) error {
 		}
 	}
 
-	j.conn.SetSession("job-UpdateFirstLoggedBuildID")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-UpdateFirstLoggedBuildID")
 	result, err := psql.Update("jobs").
 		Set("first_logged_build_id", newFirstLoggedBuildID).
 		Where(sq.Eq{"id": j.id}).
 		RunWith(j.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -218,7 +219,6 @@ func (j *job) UpdateFirstLoggedBuildID(newFirstLoggedBuildID int) error {
 }
 
 func (j *job) BuildsWithTime(page Page) ([]Build, Pagination, error) {
-	j.conn.SetSession("job-BuildsWithTime")
 	newBuildsQuery := buildsQuery.Where(sq.Eq{"j.id": j.id})
 	newMinMaxIdQuery := minMaxIdQuery.
 		Join("jobs j ON b.job_id = j.id").
@@ -230,7 +230,6 @@ func (j *job) BuildsWithTime(page Page) ([]Build, Pagination, error) {
 }
 
 func (j *job) Builds(page Page) ([]Build, Pagination, error) {
-	j.conn.SetSession("job-Builds")
 	newBuildsQuery := buildsQuery.Where(sq.Eq{"j.id": j.id})
 	newMinMaxIdQuery := minMaxIdQuery.
 		Join("jobs j ON b.job_id = j.id").
@@ -257,8 +256,8 @@ func (j *job) Build(name string) (Build, bool, error) {
 		})
 	}
 
-	j.conn.SetSession("job-Build")
-	row := query.RunWith(j.conn).QueryRow()
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-Build")
+	row := query.RunWith(j.conn).QueryRowContext(ctx)
 
 	build := &build{conn: j.conn, lockFactory: j.lockFactory}
 
@@ -279,7 +278,7 @@ func (j *job) GetNextPendingBuildBySerialGroup(serialGroups []string) (Build, bo
 		return nil, false, err
 	}
 
-	j.conn.SetSession("job-GetNextPendingBuildBySerialGroup")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-GetNextPendingBuildBySerialGroup")
 	row := buildsQuery.Options(`DISTINCT ON (b.id)`).
 		Join(`jobs_serial_groups jsg ON j.id = jsg.job_id`).
 		Where(sq.Eq{
@@ -291,7 +290,7 @@ func (j *job) GetNextPendingBuildBySerialGroup(serialGroups []string) (Build, bo
 		OrderBy("b.id ASC").
 		Limit(1).
 		RunWith(j.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	build := &build{conn: j.conn, lockFactory: j.lockFactory}
 	err = scanBuild(build, row, j.conn.EncryptionStrategy())
@@ -311,7 +310,7 @@ func (j *job) GetRunningBuildsBySerialGroup(serialGroups []string) ([]Build, err
 		return nil, err
 	}
 
-	j.conn.SetSession("job-GetRunningBuildsBySerialGroup")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-GetRunningBuildsBySerialGroup")
 	rows, err := buildsQuery.Options(`DISTINCT ON (b.id)`).
 		Join(`jobs_serial_groups jsg ON j.id = jsg.job_id`).
 		Where(sq.Eq{
@@ -320,7 +319,7 @@ func (j *job) GetRunningBuildsBySerialGroup(serialGroups []string) ([]Build, err
 		}).
 		Where(sq.Eq{"b.completed": false, "b.scheduled": true}).
 		RunWith(j.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -343,14 +342,14 @@ func (j *job) GetRunningBuildsBySerialGroup(serialGroups []string) ([]Build, err
 }
 
 func (j *job) SetMaxInFlightReached(reached bool) error {
-	j.conn.SetSession("job-SetMaxInFlightReached")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-SetMaxInFlightReached")
 	result, err := psql.Update("jobs").
 		Set("max_in_flight_reached", reached).
 		Where(sq.Eq{
 			"id": j.id,
 		}).
 		RunWith(j.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -380,7 +379,7 @@ func (j *job) GetIndependentBuildInputs() ([]BuildInput, error) {
 }
 
 func (j *job) GetNextBuildInputs() ([]BuildInput, bool, error) {
-	j.conn.SetSession("job-GetNextBuildInputs")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-GetNextBuildInputs")
 	var found bool
 	err := psql.Select("inputs_determined").
 		From("jobs").
@@ -389,7 +388,7 @@ func (j *job) GetNextBuildInputs() ([]BuildInput, bool, error) {
 			"pipeline_id": j.pipelineID,
 		}).
 		RunWith(j.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&found)
 	if err != nil {
 		return nil, false, err
@@ -412,7 +411,7 @@ func (j *job) DeleteNextInputMapping() error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("job-DeleteNextInputMapping")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-DeleteNextInputMapping")
 
 	_, err = psql.Update("jobs").
 		Set("inputs_determined", false).
@@ -421,14 +420,14 @@ func (j *job) DeleteNextInputMapping() error {
 			"pipeline_id": j.pipelineID,
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
 
 	_, err = psql.Delete("next_build_inputs").
 		Where(sq.Eq{"job_id": j.id}).
-		RunWith(tx).Exec()
+		RunWith(tx).ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -443,14 +442,14 @@ func (j *job) EnsurePendingBuildExists() error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("job-EnsurePendingBuildExists")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-EnsurePendingBuildExists")
 
 	buildName, err := j.getNewBuildName(tx)
 	if err != nil {
 		return err
 	}
 
-	rows, err := tx.Query(`
+	rows, err := tx.QueryContext(ctx, `
 		INSERT INTO builds (name, job_id, pipeline_id, team_id, status)
 		SELECT $1, $2, $3, $4, 'pending'
 		WHERE NOT EXISTS
@@ -487,14 +486,14 @@ func (j *job) EnsurePendingBuildExists() error {
 }
 
 func (j *job) GetPendingBuilds() ([]Build, error) {
-	j.conn.SetSession("job-GetPendingBuilds")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-GetPendingBuilds")
 	builds := []Build{}
 
 	row := jobsQuery.Where(sq.Eq{
 		"j.name":        j.name,
 		"j.active":      true,
 		"j.pipeline_id": j.pipelineID,
-	}).RunWith(j.conn).QueryRow()
+	}).RunWith(j.conn).QueryRowContext(ctx)
 
 	job := &job{conn: j.conn, lockFactory: j.lockFactory}
 	err := scanJob(job, row)
@@ -509,7 +508,7 @@ func (j *job) GetPendingBuilds() ([]Build, error) {
 		}).
 		OrderBy("b.id ASC").
 		RunWith(j.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +535,6 @@ func (j *job) CreateBuild() (Build, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("job-CreateBuild")
 
 	buildName, err := j.getNewBuildName(tx)
 	if err != nil {
@@ -576,7 +574,6 @@ func (j *job) ClearTaskCache(stepName string, cachePath string) (int64, error) {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("job-ClearTaskCache")
 
 	var sqlBuilder sq.DeleteBuilder = psql.Delete("task_caches").
 		Where(sq.Eq{
@@ -588,9 +585,10 @@ func (j *job) ClearTaskCache(stepName string, cachePath string) (int64, error) {
 		sqlBuilder = sqlBuilder.Where(sq.Eq{"path": cachePath})
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-ClearTaskCache")
 	sqlResult, err := sqlBuilder.
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 
 	if err != nil {
 		return 0, err
@@ -612,14 +610,14 @@ func (j *job) updateSerialGroups(serialGroups []string) error {
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("job-updateSerialGroups")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-updateSerialGroups")
 
 	_, err = psql.Delete("jobs_serial_groups").
 		Where(sq.Eq{
 			"job_id": j.id,
 		}).
 		RunWith(tx).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -628,7 +626,7 @@ func (j *job) updateSerialGroups(serialGroups []string) error {
 		_, err = psql.Insert("jobs_serial_groups (job_id, serial_group)").
 			Values(j.id, serialGroup).
 			RunWith(tx).
-			Exec()
+			ExecContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -638,12 +636,12 @@ func (j *job) updateSerialGroups(serialGroups []string) error {
 }
 
 func (j *job) updatePausedJob(pause bool) error {
-	j.conn.SetSession("job-updatePausedJob")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-updatePausedJob")
 	result, err := psql.Update("jobs").
 		Set("paused", pause).
 		Where(sq.Eq{"id": j.id}).
 		RunWith(j.conn).
-		Exec()
+		ExecContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -661,7 +659,7 @@ func (j *job) updatePausedJob(pause bool) error {
 }
 
 func (j *job) getBuildInputs(table string) ([]BuildInput, error) {
-	j.conn.SetSession("job-getBuildInputs")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-getBuildInputs")
 	rows, err := psql.Select("i.input_name, i.first_occurrence, i.resource_id, v.version").
 		From(table + " i").
 		Join("jobs j ON i.job_id = j.id").
@@ -671,7 +669,7 @@ func (j *job) getBuildInputs(table string) ([]BuildInput, error) {
 			"j.pipeline_id": j.pipelineID,
 		}).
 		RunWith(j.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -707,7 +705,7 @@ func (j *job) getBuildInputs(table string) ([]BuildInput, error) {
 }
 
 func (j *job) getNewBuildName(tx Tx) (string, error) {
-	tx.SetSession("job-getNewBuildName")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-getNewBuildName")
 	var buildName string
 	err := psql.Update("jobs").
 		Set("build_number_seq", sq.Expr("build_number_seq + 1")).
@@ -717,7 +715,7 @@ func (j *job) getNewBuildName(tx Tx) (string, error) {
 		}).
 		Suffix("RETURNING build_number_seq").
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&buildName)
 
 	return buildName, err
@@ -730,7 +728,7 @@ func (j *job) saveJobInputMapping(table string, inputMapping algorithm.InputMapp
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("job-saveJobInputMapping")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-saveJobInputMapping")
 
 	if table == "next_build_inputs" {
 		_, err = psql.Update("jobs").
@@ -738,7 +736,7 @@ func (j *job) saveJobInputMapping(table string, inputMapping algorithm.InputMapp
 			Where(sq.Eq{"id": j.id}).
 			Where(sq.Expr("NOT inputs_determined")).
 			RunWith(tx).
-			Exec()
+			ExecContext(ctx)
 	}
 	if err != nil {
 		return err
@@ -748,7 +746,7 @@ func (j *job) saveJobInputMapping(table string, inputMapping algorithm.InputMapp
 		From(table).
 		Where(sq.Eq{"job_id": j.id}).
 		RunWith(tx).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -774,7 +772,7 @@ func (j *job) saveJobInputMapping(table string, inputMapping algorithm.InputMapp
 					"input_name": inputName,
 				}).
 				RunWith(tx).
-				Exec()
+				ExecContext(ctx)
 			if err != nil {
 				return err
 			}
@@ -793,7 +791,7 @@ func (j *job) saveJobInputMapping(table string, inputMapping algorithm.InputMapp
 					"first_occurrence":           inputVersion.FirstOccurrence,
 				}).
 				RunWith(tx).
-				Exec()
+				ExecContext(ctx)
 			if err != nil {
 				return err
 			}
@@ -806,12 +804,12 @@ func (j *job) saveJobInputMapping(table string, inputMapping algorithm.InputMapp
 func (j *job) nextBuild() (Build, error) {
 	var next Build
 
-	j.conn.SetSession("job-nextBuild")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-nextBuild")
 	row := buildsQuery.
 		Where(sq.Eq{"j.id": j.id}).
 		Where(sq.Expr("b.id = j.next_build_id")).
 		RunWith(j.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	nextBuild := &build{conn: j.conn, lockFactory: j.lockFactory}
 	err := scanBuild(nextBuild, row, j.conn.EncryptionStrategy())
@@ -827,12 +825,12 @@ func (j *job) nextBuild() (Build, error) {
 func (j *job) finishedBuild() (Build, error) {
 	var finished Build
 
-	j.conn.SetSession("job-finishedBuild")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "job-finishedBuild")
 	row := buildsQuery.
 		Where(sq.Eq{"j.id": j.id}).
 		Where(sq.Expr("b.id = j.latest_completed_build_id")).
 		RunWith(j.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	finishedBuild := &build{conn: j.conn, lockFactory: j.lockFactory}
 	err := scanBuild(finishedBuild, row, j.conn.EncryptionStrategy())

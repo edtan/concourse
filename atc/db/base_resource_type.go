@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	sq "github.com/Masterminds/squirrel"
@@ -31,7 +32,6 @@ type UsedBaseResourceType struct {
 // FindOrCreate looks for an existing BaseResourceType and creates it if it
 // doesn't exist. It returns a UsedBaseResourceType.
 func (brt BaseResourceType) FindOrCreate(tx Tx, unique bool) (*UsedBaseResourceType, error) {
-	tx.SetSession("BaseResourceType-FindOrCreate")
 	ubrt, found, err := brt.Find(tx)
 	if err != nil {
 		return nil, err
@@ -45,6 +45,7 @@ func (brt BaseResourceType) FindOrCreate(tx Tx, unique bool) (*UsedBaseResourceT
 }
 
 func (brt BaseResourceType) Find(runner sq.Runner) (*UsedBaseResourceType, bool, error) {
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "BaseResourceType-Find")
 	var id int
 	var unique bool
 	err := psql.Select("id, unique_version_history").
@@ -52,7 +53,7 @@ func (brt BaseResourceType) Find(runner sq.Runner) (*UsedBaseResourceType, bool,
 		Where(sq.Eq{"name": brt.Name}).
 		Suffix("FOR SHARE").
 		RunWith(runner).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id, &unique)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -66,7 +67,7 @@ func (brt BaseResourceType) Find(runner sq.Runner) (*UsedBaseResourceType, bool,
 }
 
 func (brt BaseResourceType) create(tx Tx, unique bool) (*UsedBaseResourceType, error) {
-	tx.SetSession("BaseResourceType-create")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "BaseResourceType-create")
 
 	var id int
 	var savedUnique bool
@@ -80,7 +81,7 @@ func (brt BaseResourceType) create(tx Tx, unique bool) (*UsedBaseResourceType, e
 			RETURNING id, unique_version_history
 		`).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id, &savedUnique)
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strconv"
@@ -51,7 +52,6 @@ func (f *resourceConfigFactory) FindResourceConfigByID(resourceConfigID int) (Re
 		return nil, false, err
 	}
 	defer Rollback(tx)
-	tx.SetSession("resourceConfigFactory-FindResourceConfigByID")
 
 	resourceConfig, found, err := findResourceConfigByID(tx, resourceConfigID, f.lockFactory, f.conn)
 	if err != nil {
@@ -86,7 +86,6 @@ func (f *resourceConfigFactory) FindOrCreateResourceConfig(
 		return nil, err
 	}
 	defer Rollback(tx)
-	tx.SetSession("resourceConfigFactory-FindOrCreateResourceConfig")
 
 	resourceConfig, err := resourceConfigDescriptor.findOrCreate(tx, f.lockFactory, f.conn)
 	if err != nil {
@@ -138,7 +137,6 @@ func constructResourceConfigDescriptor(
 }
 
 func (f *resourceConfigFactory) CleanUnreferencedConfigs() error {
-	f.conn.SetSession("resourceConfigFactory-CleanUnreferencedConfigs")
 	usedByResourceConfigCheckSessionIds, _, err := sq.
 		Select("resource_config_id").
 		From("resource_config_check_sessions").
@@ -173,10 +171,11 @@ func (f *resourceConfigFactory) CleanUnreferencedConfigs() error {
 		return err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigFactory-CleanUnreferencedConfigs")
 	_, err = psql.Delete("resource_configs").
 		Where("id NOT IN (" + usedByResourceConfigCheckSessionIds + " UNION " + usedByResourceCachesIds + " UNION " + usedByResourceIds + " UNION " + usedByResourceTypesIds + ")").
 		PlaceholderFormat(sq.Dollar).
-		RunWith(f.conn).Exec()
+		RunWith(f.conn).ExecContext(ctx)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code.Name() == pqFKeyViolationErrCode {
 			// this can happen if a use or resource cache is created referencing the
@@ -191,14 +190,14 @@ func (f *resourceConfigFactory) CleanUnreferencedConfigs() error {
 }
 
 func findResourceConfigByID(tx Tx, resourceConfigID int, lockFactory lock.LockFactory, conn Conn) (ResourceConfig, bool, error) {
-	tx.SetSession("findResourceConfigByID")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceConfigFactory-findResourceConfigByID")
 	var brtIDString, cacheIDString sql.NullString
 
 	err := psql.Select("base_resource_type_id", "resource_cache_id").
 		From("resource_configs").
 		Where(sq.Eq{"id": resourceConfigID}).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&brtIDString, &cacheIDString)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -225,7 +224,7 @@ func findResourceConfigByID(tx Tx, resourceConfigID int, lockFactory lock.LockFa
 			From("base_resource_types").
 			Where(sq.Eq{"id": brtID}).
 			RunWith(tx).
-			QueryRow().
+			QueryRowContext(ctx).
 			Scan(&brtName, &unique)
 		if err != nil {
 			return nil, false, err

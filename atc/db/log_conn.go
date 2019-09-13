@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -9,6 +10,8 @@ import (
 	"code.cloudfoundry.org/lager"
 	"github.com/Masterminds/squirrel"
 )
+
+const ctxQueryNameKey = "queryName"
 
 func Log(logger lager.Logger, conn Conn) Conn {
 	return &logConn{
@@ -48,8 +51,19 @@ func (c *logConn) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return c.Conn.Exec(query, args...)
 }
 
-func (c *logConn) SetSession(s string) {
-	c.session = s
+func (c *logConn) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	defer c.elapsed(ctx.Value(ctxQueryNameKey).(string), c.strip(query))()
+	return c.Conn.QueryContext(ctx, query, args...)
+}
+
+func (c *logConn) QueryRowContext(ctx context.Context, query string, args ...interface{}) squirrel.RowScanner {
+	defer c.elapsed(ctx.Value(ctxQueryNameKey).(string), c.strip(query))()
+	return c.Conn.QueryRowContext(ctx, query, args...)
+}
+
+func (c *logConn) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	defer c.elapsed(ctx.Value(ctxQueryNameKey).(string), c.strip(query))()
+	return c.Conn.ExecContext(ctx, query, args...)
 }
 
 func (c *logConn) strip(query string) string {

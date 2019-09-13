@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 
@@ -66,7 +67,6 @@ func (f *resourceCacheFactory) FindOrCreateResourceCache(
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("resourceCacheFactory-FindOrCreateResourceCache")
 
 	usedResourceCache, err := resourceCache.findOrCreate(tx, f.lockFactory, f.conn)
 	if err != nil {
@@ -91,23 +91,23 @@ func (f *resourceCacheFactory) UpdateResourceCacheMetadata(resourceCache UsedRes
 	if err != nil {
 		return err
 	}
-	f.conn.SetSession("resourceCacheFactory-UpdateResourceCacheMetadata")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceCacheFactory-UpdateResourceCacheMetadata")
 	_, err = psql.Update("resource_caches").
 		Set("metadata", metadataJSON).
 		Where(sq.Eq{"id": resourceCache.ID()}).
 		RunWith(f.conn).
-		Exec()
+		ExecContext(ctx)
 	return err
 }
 
 func (f *resourceCacheFactory) ResourceCacheMetadata(resourceCache UsedResourceCache) (ResourceConfigMetadataFields, error) {
-	f.conn.SetSession("resourceCacheFactory-ResourceCacheMetadata")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceCacheFactory-ResourceCacheMetadata")
 	var metadataJSON sql.NullString
 	err := psql.Select("metadata").
 		From("resource_caches").
 		Where(sq.Eq{"id": resourceCache.ID()}).
 		RunWith(f.conn).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&metadataJSON)
 	if err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func (f *resourceCacheFactory) ResourceCacheMetadata(resourceCache UsedResourceC
 }
 
 func findResourceCacheByID(tx Tx, resourceCacheID int, lock lock.LockFactory, conn Conn) (UsedResourceCache, bool, error) {
-	tx.SetSession("findResourceConfigByID")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "resourceCacheFactory-findResourceConfigByID")
 	var rcID int
 	var versionBytes string
 
@@ -133,7 +133,7 @@ func findResourceCacheByID(tx Tx, resourceCacheID int, lock lock.LockFactory, co
 		From("resource_caches").
 		Where(sq.Eq{"id": resourceCacheID}).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&rcID, &versionBytes)
 
 	if err != nil {

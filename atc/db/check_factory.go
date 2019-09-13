@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -87,7 +88,7 @@ func (c *checkFactory) AcquireScanningLock(
 }
 
 func (c *checkFactory) Check(id int) (Check, bool, error) {
-	c.conn.SetSession("checkFactory-Check")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "checkFactory-Check")
 	check := &check{
 		conn:        c.conn,
 		lockFactory: c.lockFactory,
@@ -96,7 +97,7 @@ func (c *checkFactory) Check(id int) (Check, bool, error) {
 	row := checksQuery.
 		Where(sq.Eq{"c.id": id}).
 		RunWith(c.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanCheck(check, row)
 	if err != nil {
@@ -109,12 +110,12 @@ func (c *checkFactory) Check(id int) (Check, bool, error) {
 	return check, true, nil
 }
 func (c *checkFactory) StartedChecks() ([]Check, error) {
-	c.conn.SetSession("checkFactory-StartedChecks")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "checkFactory-StartedChecks")
 	rows, err := checksQuery.
 		Where(sq.Eq{"status": CheckStatusStarted}).
 		OrderBy("c.id").
 		RunWith(c.conn).
-		Query()
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +137,6 @@ func (c *checkFactory) StartedChecks() ([]Check, error) {
 }
 
 func (c *checkFactory) TryCreateCheck(checkable Checkable, resourceTypes ResourceTypes, fromVersion atc.Version, manuallyTriggered bool) (Check, bool, error) {
-	c.conn.SetSession("checkFactory-TryCreateCheck")
-
 	var err error
 
 	parentType, found := resourceTypes.Parent(checkable)
@@ -235,7 +234,6 @@ func (c *checkFactory) CreateCheck(
 	}
 
 	defer Rollback(tx)
-	tx.SetSession("checkFactory-CreateCheck")
 
 	planPayload, err := json.Marshal(plan)
 	if err != nil {
@@ -253,6 +251,7 @@ func (c *checkFactory) CreateCheck(
 		return nil, false, err
 	}
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "checkFactory-CreateCheck")
 	var id int
 	var createTime time.Time
 	err = psql.Insert("checks").
@@ -279,7 +278,7 @@ func (c *checkFactory) CreateCheck(
 			RETURNING id, create_time
 		`).
 		RunWith(tx).
-		QueryRow().
+		QueryRowContext(ctx).
 		Scan(&id, &createTime)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -308,13 +307,13 @@ func (c *checkFactory) CreateCheck(
 }
 
 func (c *checkFactory) Resources() ([]Resource, error) {
-	c.conn.SetSession("checkFactory-Resources")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "checkFactory-Resources")
 	var resources []Resource
 
 	rows, err := resourcesQuery.
 		Where(sq.Eq{"p.paused": false}).
 		RunWith(c.conn).
-		Query()
+		QueryContext(ctx)
 
 	if err != nil {
 		return nil, err
@@ -340,12 +339,12 @@ func (c *checkFactory) Resources() ([]Resource, error) {
 }
 
 func (c *checkFactory) ResourceTypes() ([]ResourceType, error) {
-	c.conn.SetSession("checkFactory-ResourceTypes")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "checkFactory-ResourceTypes")
 	var resourceTypes []ResourceType
 
 	rows, err := resourceTypesQuery.
 		RunWith(c.conn).
-		Query()
+		QueryContext(ctx)
 
 	if err != nil {
 		return nil, err

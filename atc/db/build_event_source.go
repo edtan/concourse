@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"sync"
@@ -87,6 +88,7 @@ func (source *buildEventSource) collectEvents(cursor uint) {
 
 	var batchSize = cap(source.events)
 
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "buildEventSource-collectEvents")
 	for {
 		select {
 		case <-source.stop:
@@ -98,8 +100,7 @@ func (source *buildEventSource) collectEvents(cursor uint) {
 
 		completed := false
 
-		source.conn.SetSession("buildEventSource-collectEvents")
-		err := source.conn.QueryRow(`
+		err := source.conn.QueryRowContext(ctx, `
 			SELECT builds.completed
 			FROM builds
 			WHERE builds.id = $1
@@ -110,7 +111,7 @@ func (source *buildEventSource) collectEvents(cursor uint) {
 			return
 		}
 
-		rows, err := source.conn.Query(`
+		rows, err := source.conn.QueryContext(ctx, `
 			SELECT type, version, payload
 			FROM `+source.table+`
 			WHERE build_id = $1
