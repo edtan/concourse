@@ -44,7 +44,7 @@ func (f *buildFactory) Build(buildID int) (Build, bool, error) {
 		lockFactory: f.lockFactory,
 	}
 
-	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "buildFactory-collectEvents")
+	ctx := context.WithValue(context.Background(), ctxQueryNameKey, "buildFactory-Build")
 	row := buildsQuery.
 		Where(sq.Eq{"b.id": buildID}).
 		RunWith(f.conn).
