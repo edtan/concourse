@@ -28,6 +28,7 @@ type ResourceCacheDescriptor struct {
 }
 
 func (cache *ResourceCacheDescriptor) find(tx Tx, lockFactory lock.LockFactory, conn Conn) (UsedResourceCache, bool, error) {
+	tx.SetSession("ResourceCacheDescriptor-find")
 	resourceConfig, found, err := cache.ResourceConfigDescriptor.find(tx, lockFactory, conn)
 	if err != nil {
 		return nil, false, err
@@ -45,6 +46,7 @@ func (cache *ResourceCacheDescriptor) findOrCreate(
 	lockFactory lock.LockFactory,
 	conn Conn,
 ) (UsedResourceCache, error) {
+	tx.SetSession("ResourceCacheDescriptor-findOrCreate")
 	resourceConfig, err := cache.ResourceConfigDescriptor.findOrCreate(tx, lockFactory, conn)
 	if err != nil {
 		return nil, err
@@ -99,6 +101,7 @@ func (cache *ResourceCacheDescriptor) use(
 	rc UsedResourceCache,
 	user ResourceCacheUser,
 ) error {
+	tx.SetSession("ResourceCacheDescriptor-use")
 	cols := user.SQLMap()
 	cols["resource_cache_id"] = rc.ID()
 
@@ -128,6 +131,7 @@ func (cache *ResourceCacheDescriptor) use(
 }
 
 func (cache *ResourceCacheDescriptor) findWithResourceConfig(tx Tx, resourceConfig ResourceConfig, lockFactory lock.LockFactory, conn Conn) (UsedResourceCache, bool, error) {
+	tx.SetSession("ResourceCacheDescriptor-findWithResourceConfig")
 	var id int
 	err := psql.Select("id").
 		From("resource_caches").
@@ -208,6 +212,7 @@ func (cache *usedResourceCache) ResourceConfig() ResourceConfig { return cache.r
 func (cache *usedResourceCache) Version() atc.Version           { return cache.version }
 
 func (cache *usedResourceCache) Destroy(tx Tx) (bool, error) {
+	tx.SetSession("usedResourceCache-Destroy")
 	rows, err := psql.Delete("resource_caches").
 		Where(sq.Eq{
 			"id": cache.id,

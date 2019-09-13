@@ -865,6 +865,7 @@ func (b *build) SaveOutput(
 	}
 
 	tx, err := b.conn.Begin()
+	tx.SetSession("build-SaveOutput")
 	if err != nil {
 		return err
 	}

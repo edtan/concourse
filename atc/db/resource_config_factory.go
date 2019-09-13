@@ -47,6 +47,7 @@ func NewResourceConfigFactory(conn Conn, lockFactory lock.LockFactory) ResourceC
 
 func (f *resourceConfigFactory) FindResourceConfigByID(resourceConfigID int) (ResourceConfig, bool, error) {
 	tx, err := f.conn.Begin()
+	tx.SetSession("resourceConfigFactory-FindResourceConfigByID")
 	if err != nil {
 		return nil, false, err
 	}
@@ -81,6 +82,7 @@ func (f *resourceConfigFactory) FindOrCreateResourceConfig(
 	}
 
 	tx, err := f.conn.Begin()
+	tx.SetSession("resourceConfigFactory-FindOrCreateResourceConfig")
 	if err != nil {
 		return nil, err
 	}

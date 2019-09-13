@@ -231,6 +231,7 @@ func (f *workerFactory) HeartbeatWorker(atcWorker atc.Worker, ttl time.Duration)
 	// parse that using the same layout to strip the timezone information
 
 	tx, err := f.conn.Begin()
+	tx.SetSession("workerFactor_HeartbeatWorker")
 	if err != nil {
 		return nil, err
 	}
@@ -290,6 +291,7 @@ func (f *workerFactory) HeartbeatWorker(atcWorker atc.Worker, ttl time.Duration)
 
 func (f *workerFactory) SaveWorker(atcWorker atc.Worker, ttl time.Duration) (Worker, error) {
 	tx, err := f.conn.Begin()
+	tx.SetSession("worker_factory-SaveWorker")
 	if err != nil {
 		return nil, err
 	}

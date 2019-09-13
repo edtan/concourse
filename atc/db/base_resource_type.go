@@ -31,6 +31,7 @@ type UsedBaseResourceType struct {
 // FindOrCreate looks for an existing BaseResourceType and creates it if it
 // doesn't exist. It returns a UsedBaseResourceType.
 func (brt BaseResourceType) FindOrCreate(tx Tx, unique bool) (*UsedBaseResourceType, error) {
+	tx.SetSession("BaseResourceType-FindOrCreate")
 	ubrt, found, err := brt.Find(tx)
 	if err != nil {
 		return nil, err

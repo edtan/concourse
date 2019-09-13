@@ -217,6 +217,7 @@ func (t *resourceType) SetResourceConfig(source atc.Source, resourceTypes atc.Ve
 	}
 
 	tx, err := t.conn.Begin()
+	tx.SetSession("resourceType-SetResourceConfig")
 	if err != nil {
 		return nil, err
 	}

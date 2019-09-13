@@ -23,6 +23,7 @@ func (f *workerTaskCacheFactory) Find(workerTaskCache WorkerTaskCache) (*UsedWor
 
 func (f *workerTaskCacheFactory) FindOrCreate(workerTaskCache WorkerTaskCache) (*UsedWorkerTaskCache, error) {
 	tx, err := f.conn.Begin()
+	tx.SetSession("WorkerTaskCacheFactory-FindOrCreate")
 	if err != nil {
 		return nil, err
 	}

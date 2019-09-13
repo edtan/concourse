@@ -18,6 +18,8 @@ func NewWorkerBaseResourceTypeFactory(conn Conn) WorkerBaseResourceTypeFactory {
 
 func (f *workerBaseResourceTypeFactory) Find(name string, worker Worker) (*UsedWorkerBaseResourceType, bool, error) {
 	tx, err := f.conn.Begin()
+	tx.SetSession("WorkerBaseResourceTypeFactory-Find")
+
 	if err != nil {
 		return nil, false, err
 	}

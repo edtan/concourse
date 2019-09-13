@@ -53,6 +53,7 @@ type Tx interface {
 	QueryRow(query string, args ...interface{}) squirrel.RowScanner
 	Rollback() error
 	Stmt(stmt *sql.Stmt) *sql.Stmt
+	SetSession(s string)
 }
 
 func Open(logger lager.Logger, sqlDriver string, sqlDataSource string, newKey *encryption.Key, oldKey *encryption.Key, connectionName string, lockFactory lock.LockFactory) (Conn, error) {
@@ -390,7 +391,7 @@ func (db *db) Begin() (Tx, error) {
 		return nil, err
 	}
 
-	return &dbTx{tx, db.logger, GlobalConnectionTracker.Track()}, nil
+	return &dbTx{tx, db.logger, "log-tx", GlobalConnectionTracker.Track()}, nil
 }
 
 func (db *db) Exec(query string, args ...interface{}) (sql.Result, error) {
@@ -417,14 +418,15 @@ func (db *db) QueryRow(query string, args ...interface{}) squirrel.RowScanner {
 type dbTx struct {
 	*sql.Tx
 
-	logger  lager.Logger
-	session *ConnectionSession
+	logger        lager.Logger
+	loggerSession string
+	session       *ConnectionSession
 }
 
 func (tx *dbTx) elapsed(action, query string) func() {
 	start := time.Now()
 	return func() {
-		tx.logger.Debug(fmt.Sprintf("%s.%s", tx.logger.SessionName(), action), lager.Data{"duration": fmt.Sprintf("%v", time.Since(start)), "query": query})
+		tx.logger.Debug(fmt.Sprintf("%s.%s", tx.loggerSession, action), lager.Data{"duration": fmt.Sprintf("%v", time.Since(start)), "query": query})
 	}
 }
 
@@ -454,6 +456,10 @@ func (tx *dbTx) Exec(query string, args ...interface{}) (sql.Result, error) {
 func (tx *dbTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	defer tx.elapsed("query", tx.strip(query))()
 	return tx.Tx.Query(query, args...)
+}
+
+func (tx *dbTx) SetSession(s string) {
+	tx.loggerSession = s
 }
 
 func (tx *dbTx) strip(query string) string {

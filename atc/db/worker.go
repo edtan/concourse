@@ -293,6 +293,7 @@ func (worker *worker) CreateContainer(owner ContainerOwner, meta ContainerMetada
 	cols = append(cols, metadata.ScanTargets()...)
 
 	tx, err := worker.conn.Begin()
+	tx.SetSession("worker-CreateContainer")
 	if err != nil {
 		return nil, err
 	}

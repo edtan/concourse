@@ -115,6 +115,7 @@ func (t *team) Workers() ([]Worker, error) {
 
 func (t *team) FindVolumeForWorkerArtifact(artifactID int) (CreatedVolume, bool, error) {
 	tx, err := t.conn.Begin()
+	tx.SetSession("team-FindVolumeForWorkerArtifact")
 	if err != nil {
 		return nil, false, err
 	}

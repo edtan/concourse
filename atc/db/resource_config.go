@@ -124,6 +124,7 @@ func (r *resourceConfig) FindResourceConfigScopeByID(resourceConfigScopeID int, 
 }
 
 func (r *ResourceConfigDescriptor) findOrCreate(tx Tx, lockFactory lock.LockFactory, conn Conn) (ResourceConfig, error) {
+	tx.SetSession("ResourceConfigDescriptor-findOrCreate")
 	rc := &resourceConfig{
 		lockFactory: lockFactory,
 		conn:        conn,
@@ -200,6 +201,7 @@ func (r *ResourceConfigDescriptor) findOrCreate(tx Tx, lockFactory lock.LockFact
 }
 
 func (r *ResourceConfigDescriptor) find(tx Tx, lockFactory lock.LockFactory, conn Conn) (ResourceConfig, bool, error) {
+	tx.SetSession("ResourceConfigDescriptor-find")
 	rc := &resourceConfig{
 		lockFactory: lockFactory,
 		conn:        conn,
@@ -256,6 +258,7 @@ func (r *ResourceConfigDescriptor) find(tx Tx, lockFactory lock.LockFactory, con
 }
 
 func (r *ResourceConfigDescriptor) findWithParentID(tx Tx, parentColumnName string, parentID int) (int, bool, error) {
+	tx.SetSession("ResourceConfigDescriptor-findWithParentID")
 	var id int
 	var whereClause sq.Eq
 
@@ -282,6 +285,7 @@ func (r *ResourceConfigDescriptor) findWithParentID(tx Tx, parentColumnName stri
 }
 
 func findOrCreateResourceConfigScope(tx Tx, conn Conn, lockFactory lock.LockFactory, resourceConfig ResourceConfig, resource Resource, resourceTypes atc.VersionedResourceTypes) (ResourceConfigScope, error) {
+	tx.SetSession("findOrCreateResourceConfigScope")
 	var unique bool
 	var uniqueResource Resource
 	var resourceID *int
