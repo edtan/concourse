@@ -66,6 +66,7 @@ func (f *resourceCacheFactory) FindOrCreateResourceCache(
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("resourceCacheFactory-FindOrCreateResourceCache")
 
 	usedResourceCache, err := resourceCache.findOrCreate(tx, f.lockFactory, f.conn)
 	if err != nil {
@@ -90,6 +91,7 @@ func (f *resourceCacheFactory) UpdateResourceCacheMetadata(resourceCache UsedRes
 	if err != nil {
 		return err
 	}
+	f.conn.SetSession("resourceCacheFactory-UpdateResourceCacheMetadata")
 	_, err = psql.Update("resource_caches").
 		Set("metadata", metadataJSON).
 		Where(sq.Eq{"id": resourceCache.ID()}).
@@ -99,6 +101,7 @@ func (f *resourceCacheFactory) UpdateResourceCacheMetadata(resourceCache UsedRes
 }
 
 func (f *resourceCacheFactory) ResourceCacheMetadata(resourceCache UsedResourceCache) (ResourceConfigMetadataFields, error) {
+	f.conn.SetSession("resourceCacheFactory-ResourceCacheMetadata")
 	var metadataJSON sql.NullString
 	err := psql.Select("metadata").
 		From("resource_caches").
@@ -122,6 +125,7 @@ func (f *resourceCacheFactory) ResourceCacheMetadata(resourceCache UsedResourceC
 }
 
 func findResourceCacheByID(tx Tx, resourceCacheID int, lock lock.LockFactory, conn Conn) (UsedResourceCache, bool, error) {
+	tx.SetSession("findResourceConfigByID")
 	var rcID int
 	var versionBytes string
 

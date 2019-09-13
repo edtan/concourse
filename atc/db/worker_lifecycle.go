@@ -27,6 +27,7 @@ func NewWorkerLifecycle(conn Conn) WorkerLifecycle {
 }
 
 func (lifecycle *workerLifecycle) DeleteUnresponsiveEphemeralWorkers() ([]string, error) {
+	lifecycle.conn.SetSession("workerLifecycle-DeleteUnresponsiveEphemeralWorkers")
 	query, args, err := psql.Delete("workers").
 		Where(sq.Eq{"ephemeral": true}).
 		Where(sq.Expr("expires < NOW()")).
@@ -46,6 +47,7 @@ func (lifecycle *workerLifecycle) DeleteUnresponsiveEphemeralWorkers() ([]string
 }
 
 func (lifecycle *workerLifecycle) StallUnresponsiveWorkers() ([]string, error) {
+	lifecycle.conn.SetSession("workerLifecycle-StallUnresponsiveWorkers")
 	query, args, err := psql.Update("workers").
 		SetMap(map[string]interface{}{
 			"state":   string(WorkerStateStalled),
@@ -114,6 +116,7 @@ func (lifecycle *workerLifecycle) DeleteFinishedRetiringWorkers() ([]string, err
 		return []string{}, err
 	}
 
+	lifecycle.conn.SetSession("workerLifecycle-DeleteFinishedRetiringWorkers")
 	rows, err := lifecycle.conn.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -159,6 +162,7 @@ func (lifecycle *workerLifecycle) LandFinishedLandingWorkers() ([]string, error)
 		return []string{}, err
 	}
 
+	lifecycle.conn.SetSession("workerLifecycle-LandFinishedLandingWorkers")
 	rows, err := lifecycle.conn.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -168,6 +172,7 @@ func (lifecycle *workerLifecycle) LandFinishedLandingWorkers() ([]string, error)
 }
 
 func (lifecycle *workerLifecycle) GetWorkerStateByName() (map[string]WorkerState, error) {
+	lifecycle.conn.SetSession("workerLifecycle-GetWorkerStateByName")
 	rows, err := psql.Select(`
 		name,
 		state

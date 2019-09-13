@@ -23,6 +23,7 @@ type UsedWorkerResourceType struct {
 }
 
 func (wrt WorkerResourceType) FindOrCreate(tx Tx, unique bool) (*UsedWorkerResourceType, error) {
+	tx.SetSession("WorkerResourceType-FindOrCreate")
 	usedBaseResourceType, err := wrt.BaseResourceType.FindOrCreate(tx, unique)
 	if err != nil {
 		return nil, err
@@ -60,6 +61,7 @@ func (wrt WorkerResourceType) FindOrCreate(tx Tx, unique bool) (*UsedWorkerResou
 }
 
 func (wrt WorkerResourceType) find(tx Tx, usedBaseResourceType *UsedBaseResourceType) (*UsedWorkerResourceType, bool, error) {
+	tx.SetSession("WorkerResourceType-find")
 	var (
 		workerName string
 		id         int
@@ -91,6 +93,7 @@ func (wrt WorkerResourceType) find(tx Tx, usedBaseResourceType *UsedBaseResource
 }
 
 func (wrt WorkerResourceType) create(tx Tx, usedBaseResourceType *UsedBaseResourceType) (*UsedWorkerResourceType, error) {
+	tx.SetSession("WorkerResourceType-create")
 	var id int
 	err := psql.Insert("worker_base_resource_types").
 		Columns(

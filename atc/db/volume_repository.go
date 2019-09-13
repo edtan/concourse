@@ -57,6 +57,8 @@ func NewVolumeRepository(conn Conn) VolumeRepository {
 }
 
 func (repository *volumeRepository) queryVolumeHandles(cond sq.Eq) ([]string, error) {
+	repository.conn.SetSession("volumeRepository-queryVolumeHandles")
+
 	query, args, err := psql.Select("handle").From("volumes").Where(cond).ToSql()
 	if err != nil {
 		return nil, err
@@ -86,6 +88,8 @@ func (repository *volumeRepository) queryVolumeHandles(cond sq.Eq) ([]string, er
 }
 
 func (repository *volumeRepository) UpdateVolumesMissingSince(workerName string, reportedHandles []string) error {
+	repository.conn.SetSession("volumeRepository-UpdateVolumesMissingSince")
+
 	// clear out missing_since for reported volumes
 	query, args, err := psql.Update("volumes").
 		Set("missing_since", nil).
@@ -141,6 +145,8 @@ func (repository *volumeRepository) UpdateVolumesMissingSince(workerName string,
 }
 
 func (repository *volumeRepository) RemoveMissingVolumes(gracePeriod time.Duration) (int, error) {
+	repository.conn.SetSession("volumeRepository-RemoveMissingVolumes")
+
 	result, err := psql.Delete("volumes").
 		Where(
 			sq.And{
@@ -167,6 +173,8 @@ func (repository *volumeRepository) RemoveMissingVolumes(gracePeriod time.Durati
 }
 
 func (repository *volumeRepository) RemoveDestroyingVolumes(workerName string, handles []string) (int, error) {
+	repository.conn.SetSession("volumeRepository-RemoveDestroyingVolumes")
+
 	rows, err := psql.Delete("volumes").
 		Where(
 			sq.And{
@@ -196,6 +204,8 @@ func (repository *volumeRepository) RemoveDestroyingVolumes(workerName string, h
 }
 
 func (repository *volumeRepository) GetTeamVolumes(teamID int) ([]CreatedVolume, error) {
+	repository.conn.SetSession("volumeRepository-GetTeamVolumes")
+
 	query, args, err := psql.Select(volumeColumns...).
 		From("volumes v").
 		LeftJoin("workers w ON v.worker_name = w.name").
@@ -272,6 +282,8 @@ func (repository *volumeRepository) CreateVolume(teamID int, workerName string, 
 }
 
 func (repository *volumeRepository) CreateContainerVolume(teamID int, workerName string, container CreatingContainer, mountPath string) (CreatingVolume, error) {
+	repository.conn.SetSession("volumeRepository-CreateContainerVolume")
+
 	volume, err := repository.createVolume(
 		teamID,
 		workerName,
@@ -291,6 +303,8 @@ func (repository *volumeRepository) CreateContainerVolume(teamID int, workerName
 }
 
 func (repository *volumeRepository) FindVolumesForContainer(container CreatedContainer) ([]CreatedVolume, error) {
+	repository.conn.SetSession("volumeRepository-FindVolumesForContainer")
+
 	query, args, err := psql.Select(volumeColumns...).
 		From("volumes v").
 		LeftJoin("workers w ON v.worker_name = w.name").
@@ -340,6 +354,8 @@ func (repository *volumeRepository) FindBaseResourceTypeVolume(uwbrt *UsedWorker
 }
 
 func (repository *volumeRepository) FindTaskCacheVolume(teamID int, workerName string, taskCache UsedTaskCache) (CreatedVolume, bool, error) {
+	repository.conn.SetSession("volumeRepository-FindTaskCacheVolume")
+
 	usedWorkerTaskCache, found, err := WorkerTaskCache{
 		WorkerName: workerName,
 		TaskCache:  taskCache,
@@ -407,6 +423,8 @@ func (repository *volumeRepository) CreateResourceCertsVolume(workerName string,
 }
 
 func (repository *volumeRepository) FindResourceCacheVolume(workerName string, resourceCache UsedResourceCache) (CreatedVolume, bool, error) {
+	repository.conn.SetSession("volumeRepository-FindResourceCacheVolume")
+
 	workerResourceCache, found, err := WorkerResourceCache{
 		WorkerName:    workerName,
 		ResourceCache: resourceCache,
@@ -449,6 +467,8 @@ func (repository *volumeRepository) FindCreatedVolume(handle string) (CreatedVol
 }
 
 func (repository *volumeRepository) GetOrphanedVolumes() ([]CreatedVolume, error) {
+	repository.conn.SetSession("volumeRepository-GetOrphanedVolumes")
+
 	query, args, err := psql.Select(volumeColumns...).
 		From("volumes v").
 		LeftJoin("workers w ON v.worker_name = w.name").
@@ -501,6 +521,8 @@ func (repository *volumeRepository) GetOrphanedVolumes() ([]CreatedVolume, error
 }
 
 func (repository *volumeRepository) DestroyFailedVolumes() (int, error) {
+	repository.conn.SetSession("volumeRepository-DestroyFailedVolumes")
+
 	queryId, args, err := psql.Select("v.id").
 		From("volumes v").
 		LeftJoin("workers w ON v.worker_name = w.name").
@@ -552,6 +574,8 @@ func (repository *volumeRepository) createVolume(
 	columns map[string]interface{},
 	volumeType VolumeType,
 ) (*creatingVolume, error) {
+	repository.conn.SetSession("volumeRepository-createVolume")
+
 	var volumeID int
 	handle, err := uuid.NewV4()
 	if err != nil {
@@ -594,6 +618,8 @@ func (repository *volumeRepository) createVolume(
 }
 
 func (repository *volumeRepository) findVolume(teamID int, workerName string, columns map[string]interface{}) (CreatingVolume, CreatedVolume, error) {
+	repository.conn.SetSession("volumeRepository-findVolume")
+
 	whereClause := sq.Eq{}
 	if teamID != 0 {
 		whereClause["v.team_id"] = teamID
@@ -610,6 +636,8 @@ func (repository *volumeRepository) findVolume(teamID int, workerName string, co
 }
 
 func getVolume(conn Conn, where map[string]interface{}) (CreatingVolume, CreatedVolume, error) {
+	conn.SetSession("volumeRepository-getVolume")
+
 	row := psql.Select(volumeColumns...).
 		From("volumes v").
 		LeftJoin("workers w ON v.worker_name = w.name").

@@ -148,6 +148,7 @@ type ContainerOwnerExpiries struct {
 }
 
 func (c resourceConfigCheckSessionContainerOwner) Find(conn Conn) (sq.Eq, bool, error) {
+	conn.SetSession("resourceConfigCheckSessionContainerOwner-Find")
 	var ids []int
 	rows, err := psql.Select("id").
 		From("resource_config_check_sessions").
@@ -181,6 +182,7 @@ func (c resourceConfigCheckSessionContainerOwner) Find(conn Conn) (sq.Eq, bool, 
 }
 
 func (c resourceConfigCheckSessionContainerOwner) Create(tx Tx, workerName string) (map[string]interface{}, error) {
+	tx.SetSession("resourceConfigCheckSessionContainerOwner-Create")
 	var wbrtID int
 	err := psql.Select("id").
 		From("worker_base_resource_types").

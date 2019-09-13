@@ -197,6 +197,7 @@ func (t *resourceType) Version() atc.Version              { return t.version }
 func (t *resourceType) CurrentPinnedVersion() atc.Version { return nil }
 
 func (t *resourceType) Reload() (bool, error) {
+	t.conn.SetSession("resourceType-Reload")
 	row := resourceTypesQuery.Where(sq.Eq{"r.id": t.id}).RunWith(t.conn).QueryRow()
 
 	err := scanResourceType(t, row)
@@ -217,12 +218,12 @@ func (t *resourceType) SetResourceConfig(source atc.Source, resourceTypes atc.Ve
 	}
 
 	tx, err := t.conn.Begin()
-	tx.SetSession("resourceType-SetResourceConfig")
 	if err != nil {
 		return nil, err
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("resourceType-SetResourceConfig")
 
 	resourceConfig, err := resourceConfigDescriptor.findOrCreate(tx, t.lockFactory, t.conn)
 	if err != nil {
@@ -255,6 +256,7 @@ func (t *resourceType) SetResourceConfig(source atc.Source, resourceTypes atc.Ve
 }
 
 func (t *resourceType) SetCheckSetupError(cause error) error {
+	t.conn.SetSession("resourceType-SetCheckSetupError")
 	var err error
 
 	if cause == nil {

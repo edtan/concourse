@@ -182,6 +182,7 @@ func (r *resource) ResourceConfigScopeID() int       { return r.resourceConfigSc
 func (r *resource) Icon() string                     { return r.icon }
 
 func (r *resource) Reload() (bool, error) {
+	r.conn.SetSession("resource-Reload")
 	row := resourcesQuery.Where(sq.Eq{"r.id": r.id}).
 		RunWith(r.conn).
 		QueryRow()
@@ -204,12 +205,12 @@ func (r *resource) SetResourceConfig(source atc.Source, resourceTypes atc.Versio
 	}
 
 	tx, err := r.conn.Begin()
-	tx.SetSession("resource-SetResourceConfig")
 	if err != nil {
 		return nil, err
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("resource-SetResourceConfig")
 
 	resourceConfig, err := resourceConfigDescriptor.findOrCreate(tx, r.lockFactory, r.conn)
 	if err != nil {
@@ -295,6 +296,7 @@ func (r *resource) SaveUncheckedVersion(version atc.Version, metadata ResourceCo
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("resource-SaveUncheckedVersion")
 
 	resourceConfigScope, err := findOrCreateResourceConfigScope(tx, r.conn, r.lockFactory, resourceConfig, r, resourceTypes)
 	if err != nil {
@@ -320,6 +322,7 @@ func (r *resource) UpdateMetadata(version atc.Version, metadata ResourceConfigMe
 		return false, err
 	}
 
+	r.conn.SetSession("resource-UpdateMetadata")
 	_, err = psql.Update("resource_config_versions").
 		Set("metadata", string(metadataJSON)).
 		Where(sq.Eq{
@@ -346,6 +349,7 @@ func (r *resource) ResourceConfigVersionID(version atc.Version) (int, bool, erro
 		return 0, false, err
 	}
 
+	r.conn.SetSession("resource-ResourceConfigVersionID")
 	var id int
 	err = psql.Select("rcv.id").
 		From("resource_config_versions rcv").
@@ -366,6 +370,7 @@ func (r *resource) ResourceConfigVersionID(version atc.Version) (int, bool, erro
 }
 
 func (r *resource) SetPinComment(comment string) error {
+	r.conn.SetSession("resource-SetPinComment")
 	_, err := psql.Update("resource_pins").
 		Set("comment_text", comment).
 		Where(sq.Eq{"resource_id": r.ID()}).
@@ -385,6 +390,7 @@ func (r *resource) CurrentPinnedVersion() atc.Version {
 }
 
 func (r *resource) Versions(page Page, versionFilter atc.Version) ([]atc.ResourceVersion, Pagination, bool, error) {
+	r.conn.SetSession("resource-Versions")
 	query := `
 		SELECT v.id, v.version, v.metadata, v.check_order,
 			NOT EXISTS (
@@ -565,6 +571,7 @@ func (r *resource) DisableVersion(rcvID int) error {
 }
 
 func (r *resource) PinVersion(rcvID int) error {
+	r.conn.SetSession("resource-PinVersion")
 	results, err := r.conn.Exec(`
 	    INSERT INTO resource_pins(resource_id, version, comment_text)
 			VALUES ($1,
@@ -589,6 +596,7 @@ func (r *resource) PinVersion(rcvID int) error {
 }
 
 func (r *resource) UnpinVersion() error {
+	r.conn.SetSession("resource-UnpinVersion")
 	results, err := psql.Delete("resource_pins").
 		Where(sq.Eq{"resource_pins.resource_id": r.id}).
 		RunWith(r.conn).
@@ -616,6 +624,7 @@ func (r *resource) toggleVersion(rcvID int, enable bool) error {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("resource-toggleVersion")
 
 	var results sql.Result
 	if enable {

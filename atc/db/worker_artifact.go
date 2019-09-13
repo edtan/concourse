@@ -53,6 +53,7 @@ func (a *artifact) Volume(teamID int) (CreatedVolume, bool, error) {
 }
 
 func saveWorkerArtifact(tx Tx, conn Conn, atcArtifact atc.WorkerArtifact) (WorkerArtifact, error) {
+	tx.SetSession("saveWorkerArtifact")
 
 	var artifactID int
 
@@ -89,6 +90,7 @@ func saveWorkerArtifact(tx Tx, conn Conn, atcArtifact atc.WorkerArtifact) (Worke
 }
 
 func getWorkerArtifact(tx Tx, conn Conn, id int) (WorkerArtifact, bool, error) {
+	tx.SetSession("getWorkerArtifact")
 	var (
 		createdAtTime pq.NullTime
 		buildID       sql.NullInt64

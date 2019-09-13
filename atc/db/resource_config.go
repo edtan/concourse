@@ -80,6 +80,7 @@ func (r *resourceConfig) FindResourceConfigScopeByID(resourceConfigScopeID int, 
 		checkErrBlob sql.NullString
 	)
 
+	r.conn.SetSession("resourceConfig-FindResourceConfigScopeByID")
 	err := psql.Select("id, resource_id, resource_config_id, check_error").
 		From("resource_config_scopes").
 		Where(sq.Eq{

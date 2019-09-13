@@ -27,6 +27,7 @@ func NewResourceCacheLifecycle(conn Conn) ResourceCacheLifecycle {
 }
 
 func (f *resourceCacheLifecycle) CleanBuildImageResourceCaches(logger lager.Logger) error {
+	f.conn.SetSession("resourceCacheLifecycle-CleanBuildImageResourceCaches")
 	_, err := sq.Delete("build_image_resource_caches birc USING builds b").
 		Where("birc.build_id = b.id").
 		Where(sq.Expr("((now() - b.end_time) > '24 HOURS'::INTERVAL)")).
@@ -37,6 +38,7 @@ func (f *resourceCacheLifecycle) CleanBuildImageResourceCaches(logger lager.Logg
 }
 
 func (f *resourceCacheLifecycle) CleanUsesForFinishedBuilds(logger lager.Logger) error {
+	f.conn.SetSession("resourceCacheLifecycle-CleanUsesForFinishedBuilds")
 	_, err := psql.Delete("resource_cache_uses rcu USING builds b").
 		Where(sq.And{
 			sq.Expr("rcu.build_id = b.id"),
@@ -48,6 +50,7 @@ func (f *resourceCacheLifecycle) CleanUsesForFinishedBuilds(logger lager.Logger)
 }
 
 func (f *resourceCacheLifecycle) CleanUpInvalidCaches(logger lager.Logger) error {
+	f.conn.SetSession("resourceCacheLifecycle-CleanUpInvalidCaches")
 	stillInUseCacheIds, _, err := sq.
 		Select("resource_cache_id").
 		From("resource_cache_uses").
@@ -143,6 +146,7 @@ func (f *resourceCacheLifecycle) CleanUsesForPausedPipelineResources() error {
 		return err
 	}
 
+	f.conn.SetSession("resourceCacheLifecycle-CleanUsesForPausedPipelineResources")
 	_, err = psql.Delete("resource_cache_uses rcu USING resources r").
 		Where(sq.And{
 			sq.Expr("r.pipeline_id NOT IN (" + pausedPipelineIds + ")"),

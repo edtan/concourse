@@ -44,6 +44,7 @@ func (factory *teamFactory) createTeam(t atc.Team, admin bool) (Team, error) {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("teamFactory-createTeam")
 
 	auth, err := json.Marshal(t.Auth)
 	if err != nil {
@@ -89,6 +90,7 @@ func (factory *teamFactory) FindTeam(teamName string) (Team, bool, error) {
 		lockFactory: factory.lockFactory,
 	}
 
+	factory.conn.SetSession("teamFactory-FindTeam")
 	row := psql.Select("id, name, admin, auth").
 		From("teams").
 		Where(sq.Eq{"LOWER(name)": strings.ToLower(teamName)}).
@@ -108,6 +110,7 @@ func (factory *teamFactory) FindTeam(teamName string) (Team, bool, error) {
 }
 
 func (factory *teamFactory) GetTeams() ([]Team, error) {
+	factory.conn.SetSession("teamFactory-GetTeams")
 	rows, err := psql.Select("id, name, admin, auth").
 		From("teams").
 		OrderBy("id ASC").
@@ -138,6 +141,7 @@ func (factory *teamFactory) GetTeams() ([]Team, error) {
 }
 
 func (factory *teamFactory) CreateDefaultTeamIfNotExists() (Team, error) {
+	factory.conn.SetSession("teamFactory-CreateDefaultTeamIfNotExists")
 	_, err := psql.Update("teams").
 		Set("admin", true).
 		Where(sq.Eq{"LOWER(name)": strings.ToLower(atc.DefaultTeamName)}).

@@ -25,6 +25,7 @@ func NewPipelineFactory(conn Conn, lockFactory lock.LockFactory) PipelineFactory
 }
 
 func (f *pipelineFactory) VisiblePipelines(teamNames []string) ([]Pipeline, error) {
+	f.conn.SetSession("pipelineFactory-VisiblePipelines")
 	rows, err := pipelinesQuery.
 		Where(sq.Eq{"t.name": teamNames}).
 		OrderBy("team_id ASC", "ordering ASC").
@@ -58,6 +59,7 @@ func (f *pipelineFactory) VisiblePipelines(teamNames []string) ([]Pipeline, erro
 }
 
 func (f *pipelineFactory) AllPipelines() ([]Pipeline, error) {
+	f.conn.SetSession("pipelineFactory-AllPipelines")
 	rows, err := pipelinesQuery.
 		OrderBy("team_id ASC", "ordering ASC").
 		RunWith(f.conn).

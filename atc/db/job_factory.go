@@ -41,6 +41,7 @@ func (j *jobFactory) VisibleJobs(teamNames []string) (Dashboard, error) {
 }
 
 func (j *jobFactory) teamJobs(teamNames []string) (Jobs, error) {
+	j.conn.SetSession("jobFactory-teamJobs")
 	rows, err := jobsQuery.
 		Where(sq.Eq{
 			"t.name":   teamNames,
@@ -57,6 +58,7 @@ func (j *jobFactory) teamJobs(teamNames []string) (Jobs, error) {
 }
 
 func (j *jobFactory) otherTeamPublicJobs(teamNames []string) (Jobs, error) {
+	j.conn.SetSession("jobFactory-otherTeamPublicJobs")
 	rows, err := jobsQuery.
 		Where(sq.NotEq{
 			"t.name": teamNames,
@@ -76,6 +78,7 @@ func (j *jobFactory) otherTeamPublicJobs(teamNames []string) (Jobs, error) {
 }
 
 func (j *jobFactory) AllActiveJobs() (Dashboard, error) {
+	j.conn.SetSession("jobFactory-AllActiveJobs")
 	rows, err := jobsQuery.
 		Where(sq.Eq{
 			"j.active": true,
@@ -139,6 +142,7 @@ func (j *jobFactory) buildDashboard(jobs Jobs) (Dashboard, error) {
 }
 
 func (j *jobFactory) getBuildsFrom(col string, jobIDs []int) (map[int]Build, error) {
+	j.conn.SetSession("jobFactory-getBuildsFrom")
 	rows, err := buildsQuery.
 		Where(sq.Eq{"j.id": jobIDs}).
 		Where(sq.Expr("j." + col + " = b.id")).

@@ -83,6 +83,7 @@ func (f *workerFactory) Workers() ([]Worker, error) {
 }
 
 func getWorker(conn Conn, query sq.SelectBuilder) (Worker, bool, error) {
+	conn.SetSession("workerFactory-getWorker")
 	row := query.
 		RunWith(conn).
 		QueryRow()
@@ -101,6 +102,7 @@ func getWorker(conn Conn, query sq.SelectBuilder) (Worker, bool, error) {
 }
 
 func getWorkers(conn Conn, query sq.SelectBuilder) ([]Worker, error) {
+	conn.SetSession("workerFactory-getWorkers")
 	rows, err := query.RunWith(conn).Query()
 	if err != nil {
 		return nil, err
@@ -231,11 +233,11 @@ func (f *workerFactory) HeartbeatWorker(atcWorker atc.Worker, ttl time.Duration)
 	// parse that using the same layout to strip the timezone information
 
 	tx, err := f.conn.Begin()
-	tx.SetSession("workerFactor_HeartbeatWorker")
 	if err != nil {
 		return nil, err
 	}
 	defer Rollback(tx)
+	tx.SetSession("workerFactory-HeartbeatWorker")
 
 	expires := "NULL"
 	if ttl != 0 {
@@ -291,12 +293,12 @@ func (f *workerFactory) HeartbeatWorker(atcWorker atc.Worker, ttl time.Duration)
 
 func (f *workerFactory) SaveWorker(atcWorker atc.Worker, ttl time.Duration) (Worker, error) {
 	tx, err := f.conn.Begin()
-	tx.SetSession("worker_factory-SaveWorker")
 	if err != nil {
 		return nil, err
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("worker_factory-SaveWorker")
 
 	savedWorker, err := saveWorker(tx, atcWorker, nil, ttl, f.conn)
 	if err != nil {
@@ -337,6 +339,7 @@ func (f *workerFactory) FindWorkersForContainerByOwner(owner ContainerOwner) ([]
 }
 
 func (f *workerFactory) BuildContainersCountPerWorker() (map[string]int, error) {
+	f.conn.SetSession("workerFactory-BuildContainersCountPerWorker")
 	rows, err := psql.Select("worker_name, COUNT(*)").
 		From("containers").
 		Where("build_id IS NOT NULL").
@@ -367,6 +370,7 @@ func (f *workerFactory) BuildContainersCountPerWorker() (map[string]int, error) 
 }
 
 func saveWorker(tx Tx, atcWorker atc.Worker, teamID *int, ttl time.Duration, conn Conn) (Worker, error) {
+	tx.SetSession("workerFactory-saveWorker")
 	resourceTypes, err := json.Marshal(atcWorker.ResourceTypes)
 	if err != nil {
 		return nil, err

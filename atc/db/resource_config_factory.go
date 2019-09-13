@@ -47,11 +47,11 @@ func NewResourceConfigFactory(conn Conn, lockFactory lock.LockFactory) ResourceC
 
 func (f *resourceConfigFactory) FindResourceConfigByID(resourceConfigID int) (ResourceConfig, bool, error) {
 	tx, err := f.conn.Begin()
-	tx.SetSession("resourceConfigFactory-FindResourceConfigByID")
 	if err != nil {
 		return nil, false, err
 	}
 	defer Rollback(tx)
+	tx.SetSession("resourceConfigFactory-FindResourceConfigByID")
 
 	resourceConfig, found, err := findResourceConfigByID(tx, resourceConfigID, f.lockFactory, f.conn)
 	if err != nil {
@@ -82,11 +82,11 @@ func (f *resourceConfigFactory) FindOrCreateResourceConfig(
 	}
 
 	tx, err := f.conn.Begin()
-	tx.SetSession("resourceConfigFactory-FindOrCreateResourceConfig")
 	if err != nil {
 		return nil, err
 	}
 	defer Rollback(tx)
+	tx.SetSession("resourceConfigFactory-FindOrCreateResourceConfig")
 
 	resourceConfig, err := resourceConfigDescriptor.findOrCreate(tx, f.lockFactory, f.conn)
 	if err != nil {
@@ -138,6 +138,7 @@ func constructResourceConfigDescriptor(
 }
 
 func (f *resourceConfigFactory) CleanUnreferencedConfigs() error {
+	f.conn.SetSession("resourceConfigFactory-CleanUnreferencedConfigs")
 	usedByResourceConfigCheckSessionIds, _, err := sq.
 		Select("resource_config_id").
 		From("resource_config_check_sessions").
@@ -190,6 +191,7 @@ func (f *resourceConfigFactory) CleanUnreferencedConfigs() error {
 }
 
 func findResourceConfigByID(tx Tx, resourceConfigID int, lockFactory lock.LockFactory, conn Conn) (ResourceConfig, bool, error) {
+	tx.SetSession("findResourceConfigByID")
 	var brtIDString, cacheIDString sql.NullString
 
 	err := psql.Select("base_resource_type_id", "resource_cache_id").

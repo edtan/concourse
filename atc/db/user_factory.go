@@ -25,6 +25,7 @@ func (f *userFactory) CreateOrUpdateUser(username, connector, sub string) (User,
 		return nil, err
 	}
 	defer Rollback(tx)
+	tx.SetSession("userFactory-CreateOrUpdateUser")
 
 	u, err := user{
 		name:      username,
@@ -46,6 +47,7 @@ func (f *userFactory) CreateOrUpdateUser(username, connector, sub string) (User,
 }
 
 func (f *userFactory) GetAllUsers() ([]User, error) {
+	f.conn.SetSession("userFactory-GetAllUsers")
 	rows, err := psql.Select("id", "username", "connector", "last_login").
 		From("users").
 		RunWith(f.conn).
@@ -73,6 +75,7 @@ func (f *userFactory) GetAllUsers() ([]User, error) {
 }
 
 func (f *userFactory) GetAllUsersByLoginDate(lastLogin time.Time) ([]User, error) {
+	f.conn.SetSession("userFactory-GetAllUsersByLoginDate")
 	rows, err := psql.Select("id", "username", "connector", "last_login").
 		From("users").
 		Where(sq.GtOrEq{"last_login": lastLogin}).

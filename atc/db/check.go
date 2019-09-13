@@ -121,6 +121,7 @@ func (c *check) BaseResourceTypeID() int {
 }
 
 func (c *check) Reload() (bool, error) {
+	c.conn.SetSession("check-Reload")
 	row := checksQuery.Where(sq.Eq{"c.id": c.id}).
 		RunWith(c.conn).
 		QueryRow()
@@ -143,6 +144,7 @@ func (c *check) Start() error {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("check-Start")
 
 	_, err = psql.Update("checks").
 		Set("start_time", sq.Expr("now()")).
@@ -189,6 +191,7 @@ func (c *check) finish(status CheckStatus, checkError error) error {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("check-finish")
 
 	builder := psql.Update("checks").
 		Set("status", status).
@@ -243,6 +246,7 @@ func (c *check) AcquireTrackingLock(logger lager.Logger) (lock.Lock, bool, error
 }
 
 func (c *check) AllCheckables() ([]Checkable, error) {
+	c.conn.SetSession("check-AllCheckables")
 	var checkables []Checkable
 
 	rows, err := resourcesQuery.

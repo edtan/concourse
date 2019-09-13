@@ -27,6 +27,7 @@ func (tc *usedTaskCache) StepName() string { return tc.stepName }
 func (tc *usedTaskCache) Path() string     { return tc.path }
 
 func (f usedTaskCache) findOrCreate(tx Tx) (UsedTaskCache, error) {
+	tx.SetSession("usedTaskCache-findOrCreate")
 	utc, found, err := f.find(tx)
 	if err != nil {
 		return nil, err

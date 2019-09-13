@@ -92,6 +92,7 @@ func (repository *containerRepository) UpdateContainersMissingSince(workerName s
 		return err
 	}
 
+	repository.conn.SetSession("containerRepository-UpdateContainersMissingSince")
 	rows, err := repository.conn.Query(query, args...)
 	if err != nil {
 		return err
@@ -140,6 +141,7 @@ func (repository *containerRepository) FindDestroyingContainers(workerName strin
 }
 
 func (repository *containerRepository) RemoveMissingContainers(gracePeriod time.Duration) (int, error) {
+	repository.conn.SetSession("containerRepository-RemoveMissingContainers")
 	result, err := psql.Delete("containers").
 		Where(
 			sq.And{
@@ -166,6 +168,7 @@ func (repository *containerRepository) RemoveMissingContainers(gracePeriod time.
 }
 
 func (repository *containerRepository) RemoveDestroyingContainers(workerName string, handlesToIgnore []string) (int, error) {
+	repository.conn.SetSession("containerRepository-RemoveDestroyingContainers")
 	rows, err := psql.Delete("containers").
 		Where(
 			sq.And{
@@ -224,6 +227,7 @@ func (repository *containerRepository) FindOrphanedContainers() ([]CreatingConta
 		return nil, nil, nil, err
 	}
 
+	repository.conn.SetSession("containerRepository-FindOrphanedContainers")
 	rows, err := repository.conn.Query(query, args...)
 	if err != nil {
 		return nil, nil, nil, err
@@ -346,6 +350,7 @@ func scanContainer(row sq.RowScanner, conn Conn) (CreatingContainer, CreatedCont
 }
 
 func (repository *containerRepository) DestroyFailedContainers() (int, error) {
+	repository.conn.SetSession("containerRepository-DestroyFailedContainers")
 	result, err := sq.Delete("containers").
 		Where(sq.Eq{"containers.state": atc.ContainerStateFailed}).
 		PlaceholderFormat(sq.Dollar).

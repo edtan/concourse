@@ -23,12 +23,12 @@ func (f *workerTaskCacheFactory) Find(workerTaskCache WorkerTaskCache) (*UsedWor
 
 func (f *workerTaskCacheFactory) FindOrCreate(workerTaskCache WorkerTaskCache) (*UsedWorkerTaskCache, error) {
 	tx, err := f.conn.Begin()
-	tx.SetSession("WorkerTaskCacheFactory-FindOrCreate")
 	if err != nil {
 		return nil, err
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("WorkerTaskCacheFactory-FindOrCreate")
 
 	usedWorkerTaskCache, err := workerTaskCache.findOrCreate(tx)
 	if err != nil {

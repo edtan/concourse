@@ -98,6 +98,7 @@ func (source *buildEventSource) collectEvents(cursor uint) {
 
 		completed := false
 
+		source.conn.SetSession("buildEventSource-collectEvents")
 		err := source.conn.QueryRow(`
 			SELECT builds.completed
 			FROM builds

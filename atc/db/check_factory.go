@@ -87,6 +87,7 @@ func (c *checkFactory) AcquireScanningLock(
 }
 
 func (c *checkFactory) Check(id int) (Check, bool, error) {
+	c.conn.SetSession("checkFactory-Check")
 	check := &check{
 		conn:        c.conn,
 		lockFactory: c.lockFactory,
@@ -108,6 +109,7 @@ func (c *checkFactory) Check(id int) (Check, bool, error) {
 	return check, true, nil
 }
 func (c *checkFactory) StartedChecks() ([]Check, error) {
+	c.conn.SetSession("checkFactory-StartedChecks")
 	rows, err := checksQuery.
 		Where(sq.Eq{"status": CheckStatusStarted}).
 		OrderBy("c.id").
@@ -134,6 +136,7 @@ func (c *checkFactory) StartedChecks() ([]Check, error) {
 }
 
 func (c *checkFactory) TryCreateCheck(checkable Checkable, resourceTypes ResourceTypes, fromVersion atc.Version, manuallyTriggered bool) (Check, bool, error) {
+	c.conn.SetSession("checkFactory-TryCreateCheck")
 
 	var err error
 
@@ -232,6 +235,7 @@ func (c *checkFactory) CreateCheck(
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("checkFactory-CreateCheck")
 
 	planPayload, err := json.Marshal(plan)
 	if err != nil {
@@ -304,6 +308,7 @@ func (c *checkFactory) CreateCheck(
 }
 
 func (c *checkFactory) Resources() ([]Resource, error) {
+	c.conn.SetSession("checkFactory-Resources")
 	var resources []Resource
 
 	rows, err := resourcesQuery.
@@ -335,6 +340,7 @@ func (c *checkFactory) Resources() ([]Resource, error) {
 }
 
 func (c *checkFactory) ResourceTypes() ([]ResourceType, error) {
+	c.conn.SetSession("checkFactory-ResourceTypes")
 	var resourceTypes []ResourceType
 
 	rows, err := resourceTypesQuery.

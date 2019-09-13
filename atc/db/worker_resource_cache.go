@@ -32,6 +32,7 @@ func (workerResourceCache WorkerResourceCache) FindOrCreate(tx Tx) (*UsedWorkerR
 		return nil, ErrWorkerBaseResourceTypeDisappeared
 	}
 
+	tx.SetSession("workerResourceCache-find")
 	id, found, err := workerResourceCache.find(tx, usedWorkerBaseResourceType)
 	if err != nil {
 		return nil, err
@@ -43,6 +44,7 @@ func (workerResourceCache WorkerResourceCache) FindOrCreate(tx Tx) (*UsedWorkerR
 		}, nil
 	}
 
+	tx.SetSession("workerResourceCache-FindOrCreate")
 	err = psql.Insert("worker_resource_caches").
 		Columns(
 			"resource_cache_id",

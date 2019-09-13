@@ -21,6 +21,7 @@ func NewArtifactLifecycle(conn Conn) *artifactLifecycle {
 }
 
 func (lifecycle *artifactLifecycle) RemoveExpiredArtifacts() error {
+	lifecycle.conn.SetSession("artifactLifecycle-RemoveExpiredArtifacts")
 
 	_, err := psql.Delete("worker_artifacts").
 		Where(sq.Expr("created_at < NOW() - interval '12 hours'")).

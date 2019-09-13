@@ -90,6 +90,7 @@ type job struct {
 }
 
 func (j *job) SetHasNewInputs(hasNewInputs bool) error {
+	j.conn.SetSession("job-SetHasNewInputs")
 	result, err := psql.Update("jobs").
 		Set("has_new_inputs", hasNewInputs).
 		Where(sq.Eq{"id": j.id}).
@@ -137,6 +138,7 @@ func (j *job) Public() bool            { return j.Config().Public }
 func (j *job) HasNewInputs() bool      { return j.hasNewInputs }
 
 func (j *job) Reload() (bool, error) {
+	j.conn.SetSession("job-Reload")
 	row := jobsQuery.Where(sq.Eq{"j.id": j.id}).
 		RunWith(j.conn).
 		QueryRow()
@@ -193,6 +195,7 @@ func (j *job) UpdateFirstLoggedBuildID(newFirstLoggedBuildID int) error {
 		}
 	}
 
+	j.conn.SetSession("job-UpdateFirstLoggedBuildID")
 	result, err := psql.Update("jobs").
 		Set("first_logged_build_id", newFirstLoggedBuildID).
 		Where(sq.Eq{"id": j.id}).
@@ -215,6 +218,7 @@ func (j *job) UpdateFirstLoggedBuildID(newFirstLoggedBuildID int) error {
 }
 
 func (j *job) BuildsWithTime(page Page) ([]Build, Pagination, error) {
+	j.conn.SetSession("job-BuildsWithTime")
 	newBuildsQuery := buildsQuery.Where(sq.Eq{"j.id": j.id})
 	newMinMaxIdQuery := minMaxIdQuery.
 		Join("jobs j ON b.job_id = j.id").
@@ -226,6 +230,7 @@ func (j *job) BuildsWithTime(page Page) ([]Build, Pagination, error) {
 }
 
 func (j *job) Builds(page Page) ([]Build, Pagination, error) {
+	j.conn.SetSession("job-Builds")
 	newBuildsQuery := buildsQuery.Where(sq.Eq{"j.id": j.id})
 	newMinMaxIdQuery := minMaxIdQuery.
 		Join("jobs j ON b.job_id = j.id").
@@ -252,6 +257,7 @@ func (j *job) Build(name string) (Build, bool, error) {
 		})
 	}
 
+	j.conn.SetSession("job-Build")
 	row := query.RunWith(j.conn).QueryRow()
 
 	build := &build{conn: j.conn, lockFactory: j.lockFactory}
@@ -273,6 +279,7 @@ func (j *job) GetNextPendingBuildBySerialGroup(serialGroups []string) (Build, bo
 		return nil, false, err
 	}
 
+	j.conn.SetSession("job-GetNextPendingBuildBySerialGroup")
 	row := buildsQuery.Options(`DISTINCT ON (b.id)`).
 		Join(`jobs_serial_groups jsg ON j.id = jsg.job_id`).
 		Where(sq.Eq{
@@ -304,6 +311,7 @@ func (j *job) GetRunningBuildsBySerialGroup(serialGroups []string) ([]Build, err
 		return nil, err
 	}
 
+	j.conn.SetSession("job-GetRunningBuildsBySerialGroup")
 	rows, err := buildsQuery.Options(`DISTINCT ON (b.id)`).
 		Join(`jobs_serial_groups jsg ON j.id = jsg.job_id`).
 		Where(sq.Eq{
@@ -335,6 +343,7 @@ func (j *job) GetRunningBuildsBySerialGroup(serialGroups []string) ([]Build, err
 }
 
 func (j *job) SetMaxInFlightReached(reached bool) error {
+	j.conn.SetSession("job-SetMaxInFlightReached")
 	result, err := psql.Update("jobs").
 		Set("max_in_flight_reached", reached).
 		Where(sq.Eq{
@@ -371,6 +380,7 @@ func (j *job) GetIndependentBuildInputs() ([]BuildInput, error) {
 }
 
 func (j *job) GetNextBuildInputs() ([]BuildInput, bool, error) {
+	j.conn.SetSession("job-GetNextBuildInputs")
 	var found bool
 	err := psql.Select("inputs_determined").
 		From("jobs").
@@ -402,6 +412,7 @@ func (j *job) DeleteNextInputMapping() error {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("job-DeleteNextInputMapping")
 
 	_, err = psql.Update("jobs").
 		Set("inputs_determined", false).
@@ -432,6 +443,7 @@ func (j *job) EnsurePendingBuildExists() error {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("job-EnsurePendingBuildExists")
 
 	buildName, err := j.getNewBuildName(tx)
 	if err != nil {
@@ -475,6 +487,7 @@ func (j *job) EnsurePendingBuildExists() error {
 }
 
 func (j *job) GetPendingBuilds() ([]Build, error) {
+	j.conn.SetSession("job-GetPendingBuilds")
 	builds := []Build{}
 
 	row := jobsQuery.Where(sq.Eq{
@@ -523,6 +536,7 @@ func (j *job) CreateBuild() (Build, error) {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("job-CreateBuild")
 
 	buildName, err := j.getNewBuildName(tx)
 	if err != nil {
@@ -562,6 +576,7 @@ func (j *job) ClearTaskCache(stepName string, cachePath string) (int64, error) {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("job-ClearTaskCache")
 
 	var sqlBuilder sq.DeleteBuilder = psql.Delete("task_caches").
 		Where(sq.Eq{
@@ -597,6 +612,7 @@ func (j *job) updateSerialGroups(serialGroups []string) error {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("job-updateSerialGroups")
 
 	_, err = psql.Delete("jobs_serial_groups").
 		Where(sq.Eq{
@@ -622,6 +638,7 @@ func (j *job) updateSerialGroups(serialGroups []string) error {
 }
 
 func (j *job) updatePausedJob(pause bool) error {
+	j.conn.SetSession("job-updatePausedJob")
 	result, err := psql.Update("jobs").
 		Set("paused", pause).
 		Where(sq.Eq{"id": j.id}).
@@ -644,6 +661,7 @@ func (j *job) updatePausedJob(pause bool) error {
 }
 
 func (j *job) getBuildInputs(table string) ([]BuildInput, error) {
+	j.conn.SetSession("job-getBuildInputs")
 	rows, err := psql.Select("i.input_name, i.first_occurrence, i.resource_id, v.version").
 		From(table + " i").
 		Join("jobs j ON i.job_id = j.id").
@@ -689,6 +707,7 @@ func (j *job) getBuildInputs(table string) ([]BuildInput, error) {
 }
 
 func (j *job) getNewBuildName(tx Tx) (string, error) {
+	tx.SetSession("job-getNewBuildName")
 	var buildName string
 	err := psql.Update("jobs").
 		Set("build_number_seq", sq.Expr("build_number_seq + 1")).
@@ -711,6 +730,7 @@ func (j *job) saveJobInputMapping(table string, inputMapping algorithm.InputMapp
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("job-saveJobInputMapping")
 
 	if table == "next_build_inputs" {
 		_, err = psql.Update("jobs").
@@ -786,6 +806,7 @@ func (j *job) saveJobInputMapping(table string, inputMapping algorithm.InputMapp
 func (j *job) nextBuild() (Build, error) {
 	var next Build
 
+	j.conn.SetSession("job-nextBuild")
 	row := buildsQuery.
 		Where(sq.Eq{"j.id": j.id}).
 		Where(sq.Expr("b.id = j.next_build_id")).
@@ -806,6 +827,7 @@ func (j *job) nextBuild() (Build, error) {
 func (j *job) finishedBuild() (Build, error) {
 	var finished Build
 
+	j.conn.SetSession("job-finishedBuild")
 	row := buildsQuery.
 		Where(sq.Eq{"j.id": j.id}).
 		Where(sq.Expr("b.id = j.latest_completed_build_id")).

@@ -20,6 +20,7 @@ type UsedWorkerTaskCache struct {
 func (wtc WorkerTaskCache) findOrCreate(
 	tx Tx,
 ) (*UsedWorkerTaskCache, error) {
+	tx.SetSession("WorkerTaskCache-findOrCreate")
 	uwtc, found, err := wtc.find(tx)
 	if err != nil {
 		return nil, err
@@ -80,6 +81,7 @@ func (workerTaskCache WorkerTaskCache) find(runner sq.Runner) (*UsedWorkerTaskCa
 }
 
 func removeUnusedWorkerTaskCaches(tx Tx, pipelineID int, jobConfigs []atc.JobConfig) error {
+	tx.SetSession("removeUnusedWorkerTaskCaches")
 	steps := make(map[string][]string)
 	for _, jobConfig := range jobConfigs {
 		for _, jobConfigPlan := range jobConfig.Plan {

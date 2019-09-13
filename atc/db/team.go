@@ -84,6 +84,7 @@ func (t *team) Admin() bool  { return t.admin }
 func (t *team) Auth() atc.TeamAuth { return t.auth }
 
 func (t *team) Delete() error {
+	t.conn.SetSession("team-Delete")
 	_, err := psql.Delete("teams").
 		Where(sq.Eq{
 			"name": t.name,
@@ -95,6 +96,7 @@ func (t *team) Delete() error {
 }
 
 func (t *team) Rename(name string) error {
+	t.conn.SetSession("team-Rename")
 	_, err := psql.Update("teams").
 		Set("name", name).
 		Where(sq.Eq{
@@ -115,12 +117,12 @@ func (t *team) Workers() ([]Worker, error) {
 
 func (t *team) FindVolumeForWorkerArtifact(artifactID int) (CreatedVolume, bool, error) {
 	tx, err := t.conn.Begin()
-	tx.SetSession("team-FindVolumeForWorkerArtifact")
 	if err != nil {
 		return nil, false, err
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("team-FindVolumeForWorkerArtifact")
 
 	artifact, found, err := getWorkerArtifact(tx, t.conn, artifactID)
 	if err != nil {
@@ -152,6 +154,7 @@ func (t *team) FindWorkerForVolume(handle string) (Worker, bool, error) {
 }
 
 func (t *team) Containers() ([]Container, error) {
+	t.conn.SetSession("team-Containers")
 	rows, err := selectContainers("c").
 		Join("workers w ON c.worker_name = w.name").
 		Join("resource_config_check_sessions rccs ON rccs.id = c.resource_config_check_session_id").
@@ -226,6 +229,7 @@ func (t *team) Containers() ([]Container, error) {
 }
 
 func (t *team) IsCheckContainer(handle string) (bool, error) {
+	t.conn.SetSession("team-IsCheckContainer")
 	var containerType string
 	err := psql.Select("meta_type").
 		From("containers").
@@ -243,6 +247,7 @@ func (t *team) IsCheckContainer(handle string) (bool, error) {
 }
 
 func (t *team) IsContainerWithinTeam(handle string, isCheck bool) (bool, error) {
+	t.conn.SetSession("team-IsContainerWithinTeam")
 	var ok int
 	var err error
 
@@ -304,6 +309,7 @@ func (t *team) FindContainersByMetadata(metadata ContainerMetadata) ([]Container
 	eq := sq.Eq(metadata.SQLMap())
 	eq["team_id"] = t.id
 
+	t.conn.SetSession("team-FindContainersByMetadata")
 	rows, err := selectContainers().
 		Where(eq).
 		RunWith(t.conn).
@@ -364,6 +370,7 @@ func (t *team) SavePipeline(
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("team-SavePipeline")
 
 	err = tx.QueryRow(`
 		SELECT COUNT(1)
@@ -547,6 +554,7 @@ func (t *team) Pipeline(pipelineName string) (Pipeline, bool, error) {
 }
 
 func (t *team) Pipelines() ([]Pipeline, error) {
+	t.conn.SetSession("team-Pipelines")
 	rows, err := pipelinesQuery.
 		Where(sq.Eq{
 			"team_id": t.id,
@@ -567,6 +575,7 @@ func (t *team) Pipelines() ([]Pipeline, error) {
 }
 
 func (t *team) PublicPipelines() ([]Pipeline, error) {
+	t.conn.SetSession("team-PublicPipelines")
 	rows, err := pipelinesQuery.
 		Where(sq.Eq{
 			"team_id": t.id,
@@ -594,6 +603,7 @@ func (t *team) OrderPipelines(pipelineNames []string) error {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("team-OrderPipelines")
 
 	for i, name := range pipelineNames {
 		pipelineUpdate, err := psql.Update("pipelines").
@@ -626,6 +636,7 @@ func (t *team) CreateOneOffBuild() (Build, error) {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("team-CreateOneOffBuild")
 
 	build := &build{conn: t.conn, lockFactory: t.lockFactory}
 	err = createBuild(tx, build, map[string]interface{}{
@@ -652,6 +663,7 @@ func (t *team) CreateStartedBuild(plan atc.Plan) (Build, error) {
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("team-CreateStartedBuild")
 
 	metadata, err := json.Marshal(plan)
 	if err != nil {
@@ -724,6 +736,7 @@ func (t *team) SaveWorker(atcWorker atc.Worker, ttl time.Duration) (Worker, erro
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("team-SaveWorker")
 
 	savedWorker, err := saveWorker(tx, atcWorker, &t.id, ttl, t.conn)
 	if err != nil {
@@ -744,6 +757,7 @@ func (t *team) UpdateProviderAuth(auth atc.TeamAuth) error {
 		return err
 	}
 	defer Rollback(tx)
+	tx.SetSession("team-UpdateProviderAuth")
 
 	jsonEncodedProviderAuth, err := json.Marshal(auth)
 	if err != nil {
@@ -810,6 +824,7 @@ func (t *team) FindCheckContainers(pipelineName string, resourceName string, sec
 		return nil, nil, err
 	}
 
+	t.conn.SetSession("team-FindCheckContainers")
 	rows, err := selectContainers("c").
 		Join("resource_config_check_sessions rccs ON rccs.id = c.resource_config_check_session_id").
 		Where(sq.Eq{
@@ -868,6 +883,7 @@ type UpdateName struct {
 }
 
 func (t *team) updateName(tx Tx, jobs []atc.JobConfig, pipelineID int) error {
+	tx.SetSession("team-updateName")
 	jobsToUpdate := []UpdateName{}
 
 	for _, job := range jobs {
@@ -962,6 +978,7 @@ func sortUpdateNames(jobNames []UpdateName) []UpdateName {
 }
 
 func (t *team) saveJob(tx Tx, job atc.JobConfig, pipelineID int, groups []string) error {
+	tx.SetSession("team-saveJob")
 	configPayload, err := json.Marshal(job)
 	if err != nil {
 		return err
@@ -995,6 +1012,7 @@ func (t *team) saveJob(tx Tx, job atc.JobConfig, pipelineID int, groups []string
 }
 
 func (t *team) registerSerialGroup(tx Tx, jobName, serialGroup string, pipelineID int) error {
+	tx.SetSession("team-registerSerialGroup")
 	_, err := tx.Exec(`
     INSERT INTO jobs_serial_groups (serial_group, job_id) VALUES
     ($1, (SELECT j.id
@@ -1011,6 +1029,7 @@ func (t *team) registerSerialGroup(tx Tx, jobName, serialGroup string, pipelineI
 }
 
 func (t *team) saveResource(tx Tx, resource atc.ResourceConfig, pipelineID int) error {
+	tx.SetSession("team-saveResource")
 	configPayload, err := json.Marshal(resource)
 	if err != nil {
 		return err
@@ -1059,6 +1078,7 @@ func (t *team) saveResource(tx Tx, resource atc.ResourceConfig, pipelineID int) 
 }
 
 func (t *team) saveResourceType(tx Tx, resourceType atc.ResourceType, pipelineID int) error {
+	tx.SetSession("team-saveResourceType")
 	configPayload, err := json.Marshal(resourceType)
 	if err != nil {
 		return err
@@ -1092,6 +1112,7 @@ func (t *team) saveResourceType(tx Tx, resourceType atc.ResourceType, pipelineID
 }
 
 func checkIfRowsUpdated(tx Tx, query string, params ...interface{}) (bool, error) {
+	tx.SetSession("checkIfRowsUpdated")
 	result, err := tx.Exec(query, params...)
 	if err != nil {
 		return false, err
@@ -1124,6 +1145,7 @@ func swallowUniqueViolation(err error) error {
 }
 
 func (t *team) findContainer(whereClause sq.Sqlizer) (CreatingContainer, CreatedContainer, error) {
+	t.conn.SetSession("team-findContainer")
 	creating, created, destroying, _, err := scanContainer(
 		selectContainers().
 			Where(whereClause).
@@ -1212,6 +1234,7 @@ func scanContainers(rows *sql.Rows, conn Conn, initContainers []Container) ([]Co
 }
 
 func (t *team) queryTeam(tx Tx, query string, params ...interface{}) error {
+	tx.SetSession("team-queryTeam")
 	var providerAuth, nonce sql.NullString
 
 	err := tx.QueryRow(query, params...).Scan(

@@ -38,6 +38,7 @@ func NewBuildFactory(conn Conn, lockFactory lock.LockFactory, oneOffGracePeriod 
 }
 
 func (f *buildFactory) Build(buildID int) (Build, bool, error) {
+	f.conn.SetSession("buildFactory-collectEvents")
 	build := &build{
 		conn:        f.conn,
 		lockFactory: f.lockFactory,
@@ -90,6 +91,7 @@ func (f *buildFactory) PublicBuilds(page Page) ([]Build, Pagination, error) {
 }
 
 func (f *buildFactory) MarkNonInterceptibleBuilds() error {
+	f.conn.SetSession("buildFactory-MarkNonInterceptibleBuilds")
 	_, err := psql.Update("builds b").
 		Set("interceptible", false).
 		Where(sq.Eq{
@@ -127,6 +129,7 @@ func (f *buildFactory) GetAllStartedBuilds() ([]Build, error) {
 }
 
 func getBuilds(buildsQuery sq.SelectBuilder, conn Conn, lockFactory lock.LockFactory) ([]Build, error) {
+	conn.SetSession("buildFactory-getBuilds")
 	rows, err := buildsQuery.RunWith(conn).Query()
 	if err != nil {
 		return nil, err
@@ -150,6 +153,7 @@ func getBuilds(buildsQuery sq.SelectBuilder, conn Conn, lockFactory lock.LockFac
 }
 
 func getBuildsWithDates(buildsQuery, minMaxIdQuery sq.SelectBuilder, page Page, conn Conn, lockFactory lock.LockFactory) ([]Build, Pagination, error) {
+	conn.SetSession("buildFactory-getBuildsWithDates")
 	var newPage = Page{Limit: page.Limit}
 
 	if page.Since != 0 {
@@ -224,6 +228,7 @@ func getBuildsWithDates(buildsQuery, minMaxIdQuery sq.SelectBuilder, page Page, 
 }
 
 func getBuildsWithPagination(buildsQuery, minMaxIdQuery sq.SelectBuilder, page Page, conn Conn, lockFactory lock.LockFactory) ([]Build, Pagination, error) {
+	conn.SetSession("buildFactory-getBuildsWithPagination")
 	var (
 		rows    *sql.Rows
 		err     error

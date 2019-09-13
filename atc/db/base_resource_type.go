@@ -66,6 +66,8 @@ func (brt BaseResourceType) Find(runner sq.Runner) (*UsedBaseResourceType, bool,
 }
 
 func (brt BaseResourceType) create(tx Tx, unique bool) (*UsedBaseResourceType, error) {
+	tx.SetSession("BaseResourceType-create")
+
 	var id int
 	var savedUnique bool
 	err := psql.Insert("base_resource_types").

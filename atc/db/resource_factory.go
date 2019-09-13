@@ -33,6 +33,7 @@ func (r *resourceFactory) Resource(resourceID int) (Resource, bool, error) {
 		lockFactory: r.lockFactory,
 	}
 
+	r.conn.SetSession("resourceFactory-Resource")
 	row := resourcesQuery.
 		Where(sq.Eq{"r.id": resourceID}).
 		RunWith(r.conn).
@@ -50,6 +51,7 @@ func (r *resourceFactory) Resource(resourceID int) (Resource, bool, error) {
 }
 
 func (r *resourceFactory) VisibleResources(teamNames []string) ([]Resource, error) {
+	r.conn.SetSession("resourceFactory-VisibleResources")
 	rows, err := resourcesQuery.
 		Where(sq.Or{
 			sq.Eq{"t.name": teamNames},
@@ -69,6 +71,7 @@ func (r *resourceFactory) VisibleResources(teamNames []string) ([]Resource, erro
 }
 
 func (r *resourceFactory) AllResources() ([]Resource, error) {
+	r.conn.SetSession("resourceFactory-AllResources")
 	rows, err := resourcesQuery.
 		OrderBy("r.id ASC").
 		RunWith(r.conn).

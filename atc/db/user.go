@@ -32,6 +32,7 @@ func (u user) Connector() string    { return u.connector }
 func (u user) LastLogin() time.Time { return u.lastLogin }
 
 func (u user) find(tx Tx) (User, bool, error) {
+	tx.SetSession("user-find")
 	var (
 		id        int
 		lastLogin time.Time
@@ -63,6 +64,7 @@ func (u user) find(tx Tx) (User, bool, error) {
 }
 
 func (u user) create(tx Tx) (User, error) {
+	tx.SetSession("user-create")
 	var (
 		id        int
 		lastLogin time.Time
@@ -88,6 +90,7 @@ func (u user) create(tx Tx) (User, error) {
 }
 
 func (u user) delete(tx Tx) error {
+	tx.SetSession("user-delete")
 	_, err := psql.Delete("users").
 		Where(sq.Eq{
 			"id": u.id,

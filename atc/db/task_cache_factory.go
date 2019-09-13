@@ -32,6 +32,7 @@ func (f *taskCacheFactory) FindOrCreate(jobID int, stepName string, path string)
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("taskCacheFactory-FindOrCreate")
 
 	utc, err := usedTaskCache{
 		jobID:    jobID,

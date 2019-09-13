@@ -73,8 +73,6 @@ type Worker interface {
 
 	FindContainer(owner ContainerOwner) (CreatingContainer, CreatedContainer, error)
 	CreateContainer(owner ContainerOwner, meta ContainerMetadata) (CreatingContainer, error)
-
-	SetSession(s string)
 }
 
 type worker struct {
@@ -123,14 +121,13 @@ func (worker *worker) Ephemeral() bool                         { return worker.e
 
 func (worker *worker) StartTime() time.Time { return worker.startTime }
 
-func (worker *worker) SetSession(s string) { worker.conn.SetSession(s) }
-
 func (worker *worker) ExpiresAt() time.Time { return worker.expiresAt }
 
 func (worker *worker) Reload() (bool, error) {
+	ctx := context.WithValue(context.Background(), "queryName", "worker-Reload")
 	row := workersQuery.Where(sq.Eq{"w.name": worker.name}).
 		RunWith(worker.conn).
-		QueryRow()
+		QueryRowContext(ctx)
 
 	err := scanWorker(worker, row)
 	if err != nil {
@@ -152,6 +149,7 @@ func (worker *worker) Land() error {
 		return err
 	}
 
+	worker.conn.SetSession("worker-Land")
 	result, err := psql.Update("workers").
 		Set("state", sq.Expr("("+cSQL+")")).
 		Where(sq.Eq{"name": worker.name}).
@@ -175,6 +173,7 @@ func (worker *worker) Land() error {
 }
 
 func (worker *worker) Retire() error {
+	worker.conn.SetSession("worker-Retire")
 	result, err := psql.Update("workers").
 		SetMap(map[string]interface{}{
 			"state": string(WorkerStateRetiring),
@@ -199,6 +198,7 @@ func (worker *worker) Retire() error {
 }
 
 func (worker *worker) Prune() error {
+	worker.conn.SetSession("worker-Prune")
 	rows, err := sq.Delete("workers").
 		Where(sq.Eq{
 			"name": worker.name,
@@ -240,6 +240,7 @@ func (worker *worker) Prune() error {
 }
 
 func (worker *worker) Delete() error {
+	worker.conn.SetSession("worker-Delete")
 	_, err := sq.Delete("workers").
 		Where(sq.Eq{
 			"name": worker.name,
@@ -293,12 +294,12 @@ func (worker *worker) CreateContainer(owner ContainerOwner, meta ContainerMetada
 	cols = append(cols, metadata.ScanTargets()...)
 
 	tx, err := worker.conn.Begin()
-	tx.SetSession("worker-CreateContainer")
 	if err != nil {
 		return nil, err
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("worker-CreateContainer")
 
 	insMap := meta.SQLMap()
 	insMap["worker_name"] = worker.name
@@ -342,6 +343,7 @@ func (worker *worker) CreateContainer(owner ContainerOwner, meta ContainerMetada
 }
 
 func (worker *worker) findContainer(whereClause sq.Sqlizer) (CreatingContainer, CreatedContainer, error) {
+	worker.conn.SetSession("worker-findContainer")
 	creating, created, destroying, _, err := scanContainer(
 		selectContainers().
 			Where(whereClause).
@@ -364,6 +366,7 @@ func (worker *worker) findContainer(whereClause sq.Sqlizer) (CreatingContainer, 
 }
 
 func (worker *worker) ActiveTasks() (int, error) {
+	worker.conn.SetSession("worker-ActiveTasks")
 	err := psql.Select("active_tasks").From("workers").Where(sq.Eq{"name": worker.name}).
 		RunWith(worker.conn).
 		QueryRow().
@@ -375,6 +378,7 @@ func (worker *worker) ActiveTasks() (int, error) {
 }
 
 func (worker *worker) IncreaseActiveTasks() error {
+	worker.conn.SetSession("worker-IncreaseActiveTasks")
 	result, err := psql.Update("workers").
 		Set("active_tasks", sq.Expr("active_tasks+1")).
 		Where(sq.Eq{"name": worker.name}).
@@ -397,6 +401,7 @@ func (worker *worker) IncreaseActiveTasks() error {
 }
 
 func (worker *worker) DecreaseActiveTasks() error {
+	worker.conn.SetSession("worker-DecreaseActiveTasks")
 	result, err := psql.Update("workers").
 		Set("active_tasks", sq.Expr("active_tasks-1")).
 		Where(sq.Eq{"name": worker.name}).

@@ -219,6 +219,7 @@ func (volume *createdVolume) TaskIdentifier() (string, string, string, error) {
 	var jobName string
 	var stepName string
 
+	volume.conn.SetSession("createdVolume-TaskIdentifier")
 	err := psql.Select("p.name, j.name, tc.step_name").
 		From("worker_task_caches wtc").
 		LeftJoin("task_caches tc on tc.id = wtc.task_cache_id").
@@ -242,6 +243,7 @@ func (volume *createdVolume) findVolumeResourceTypeByCacheID(resourceCacheID int
 	var sqBaseResourceTypeID sql.NullInt64
 	var sqResourceCacheID sql.NullInt64
 
+	volume.conn.SetSession("createdVolume-findVolumeResourceTypeByCacheID")
 	err := psql.Select("rc.version, rcfg.base_resource_type_id, rcfg.resource_cache_id").
 		From("resource_caches rc").
 		LeftJoin("resource_configs rcfg ON rcfg.id = rc.resource_config_id").
@@ -292,6 +294,7 @@ func (volume *createdVolume) findWorkerBaseResourceTypeByID(workerBaseResourceTy
 	var name string
 	var version string
 
+	volume.conn.SetSession("createdVolume-findWorkerBaseResourceTypeByID")
 	err := psql.Select("brt.name, wbrt.version").
 		From("worker_base_resource_types wbrt").
 		LeftJoin("base_resource_types brt ON brt.id = wbrt.base_resource_type_id").
@@ -319,6 +322,7 @@ func (volume *createdVolume) findWorkerBaseResourceTypeByBaseResourceTypeID(base
 	var name string
 	var version string
 
+	volume.conn.SetSession("createdVolume-findWorkerBaseResourceTypeByBaseResourceTypeID")
 	err := psql.Select("wbrt.id, brt.name, wbrt.version").
 		From("worker_base_resource_types wbrt").
 		LeftJoin("base_resource_types brt ON brt.id = wbrt.base_resource_type_id").
@@ -348,6 +352,7 @@ func (volume *createdVolume) InitializeResourceCache(resourceCache UsedResourceC
 	}
 
 	defer tx.Rollback()
+	tx.SetSession("createdVolume-InitializeResourceCache")
 
 	workerResourceCache, err := WorkerResourceCache{
 		WorkerName:    volume.WorkerName(),
@@ -400,6 +405,7 @@ func (volume *createdVolume) InitializeArtifact(name string, buildID int) (Worke
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("createdVolume-InitializeArtifact")
 
 	atcWorkerArtifact := atc.WorkerArtifact{
 		Name:    name,
@@ -444,6 +450,7 @@ func (volume *createdVolume) InitializeTaskCache(jobID int, stepName string, pat
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("createdVolume-InitializeTaskCache")
 
 	usedTaskCache, err := usedTaskCache{
 		jobID:    jobID,
@@ -511,6 +518,7 @@ func (volume *createdVolume) CreateChildForContainer(container CreatingContainer
 	}
 
 	defer Rollback(tx)
+	tx.SetSession("createdVolume-CreateChildForContainer")
 
 	handle, err := uuid.NewV4()
 	if err != nil {
@@ -617,6 +625,7 @@ func (volume *destroyingVolume) Handle() string     { return volume.handle }
 func (volume *destroyingVolume) WorkerName() string { return volume.workerName }
 
 func (volume *destroyingVolume) Destroy() (bool, error) {
+	volume.conn.SetSession("destroyingVolume-Destroy")
 	rows, err := psql.Delete("volumes").
 		Where(sq.Eq{
 			"id":    volume.id,
@@ -657,6 +666,7 @@ func (volume *failedVolume) Handle() string     { return volume.handle }
 func (volume *failedVolume) WorkerName() string { return volume.workerName }
 
 func (volume *failedVolume) Destroy() (bool, error) {
+	volume.conn.SetSession("failedVolume-Destroy")
 	rows, err := psql.Delete("volumes").
 		Where(sq.Eq{
 			"id":    volume.id,
@@ -681,6 +691,7 @@ func (volume *failedVolume) Destroy() (bool, error) {
 }
 
 func volumeStateTransition(volumeID int, conn Conn, from, to VolumeState) error {
+	conn.SetSession("volume-volumeStateTransition")
 	rows, err := psql.Update("volumes").
 		Set("state", string(to)).
 		Where(sq.And{

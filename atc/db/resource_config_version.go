@@ -86,6 +86,7 @@ func (r *resourceConfigVersion) ResourceConfigScope() ResourceConfigScope {
 }
 
 func (r *resourceConfigVersion) Reload() (bool, error) {
+	r.conn.SetSession("resourceConfigVersion-Reload")
 	row := resourceConfigVersionQuery.Where(sq.Eq{"v.id": r.id}).
 		RunWith(r.conn).
 		QueryRow()

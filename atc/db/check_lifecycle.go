@@ -24,6 +24,7 @@ func NewCheckLifecycle(conn Conn) *checkLifecycle {
 }
 
 func (lifecycle *checkLifecycle) RemoveExpiredChecks(recyclePeriod time.Duration) error {
+	lifecycle.conn.SetSession("checkLifecycle-RemoveExpiredChecks")
 
 	_, err := psql.Delete("checks").
 		Where(

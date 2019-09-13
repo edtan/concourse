@@ -34,6 +34,7 @@ func (workerResourceCerts WorkerResourceCerts) Find(runner sq.BaseRunner) (*Used
 }
 
 func (workerResourceCerts WorkerResourceCerts) FindOrCreate(tx Tx) (*UsedWorkerResourceCerts, error) {
+	tx.SetSession("workerResourceCerts-FindOrCreate")
 	uwrc, found, err := workerResourceCerts.Find(tx)
 	if err != nil {
 		return nil, err
@@ -56,6 +57,7 @@ func (workerResourceCerts WorkerResourceCerts) findQuery() sq.SelectBuilder {
 }
 
 func (workerResourceCerts WorkerResourceCerts) create(tx Tx) (*UsedWorkerResourceCerts, error) {
+	tx.SetSession("workerResourceCerts-create")
 	var id int
 	err := psql.Insert("worker_resource_certs").
 		Columns(
